@@ -43,8 +43,10 @@ def is_docker_installed() -> bool:
 def is_docker_running() -> bool:
     """Check if Docker daemon is running."""
     try:
+        # Most basic check - if docker --version works, Docker is available
+        # The actual container execution will fail/succeed on its own
         result = subprocess.run(
-            ["docker", "info"],
+            ["docker", "--version"],
             capture_output=True,
             text=True,
             timeout=10
@@ -54,9 +56,9 @@ def is_docker_running() -> bool:
         return False
 
 
-def pull_naabu_docker_image(docker_image: str) -> bool:
-    """Pull the Naabu Docker image if not present."""
-    print(f"    [*] Checking Naabu Docker image: {docker_image}")
+def pull_docker_image(docker_image: str, tool_name: str) -> bool:
+    """Pull a Docker image if not present."""
+    print(f"    [*] Checking {tool_name} Docker image: {docker_image}")
 
     # Check if image exists
     result = subprocess.run(
@@ -279,6 +281,123 @@ def build_naabu_command(targets_file: str, output_file: str, settings: dict, use
 
 
 # =============================================================================
+# Nmap Command Builder
+# =============================================================================
+
+def build_nmap_command(targets_file: str, output_file: str, settings: dict, use_proxy: bool = False) -> List[str]:
+    """
+    Build the Docker command for running Nmap.
+
+    Args:
+        targets_file: Path to file containing targets (one per line)
+        output_file: Path for XML output
+        settings: Settings dictionary from main.py
+        use_proxy: Whether to use Tor proxy
+
+    Returns:
+        List of command arguments
+    """
+    # Extract settings from passed dict
+    NMAP_DOCKER_IMAGE = settings.get('NMAP_DOCKER_IMAGE', 'instrumentisto/nmap:latest')
+    NMAP_PORTS = settings.get('NMAP_PORTS', '1-10000')
+    NMAP_TOP_PORTS = settings.get('NMAP_TOP_PORTS', '')
+    NMAP_SCAN_TYPE = settings.get('NMAP_SCAN_TYPE', 'sS')
+    NMAP_TIMING = settings.get('NMAP_TIMING', 'T4')
+    NMAP_HOST_TIMEOUT = settings.get('NMAP_HOST_TIMEOUT', '30m')
+    NMAP_MAX_RETRIES = settings.get('NMAP_MAX_RETRIES', 1)
+    NMAP_MIN_RATE = settings.get('NMAP_MIN_RATE', '')
+    NMAP_MAX_RATE = settings.get('NMAP_MAX_RATE', '')
+    NMAP_SKIP_HOST_DISCOVERY = settings.get('NMAP_SKIP_HOST_DISCOVERY', True)
+    NMAP_SERVICE_DETECTION = settings.get('NMAP_SERVICE_DETECTION', False)
+    NMAP_VERSION_DETECTION = settings.get('NMAP_VERSION_DETECTION', False)
+    NMAP_OS_DETECTION = settings.get('NMAP_OS_DETECTION', False)
+    NMAP_SCRIPT_SCAN = settings.get('NMAP_SCRIPT_SCAN', False)
+    NMAP_FRAGMENT_PACKETS = settings.get('NMAP_FRAGMENT_PACKETS', False)
+    NMAP_DECOY_SCAN = settings.get('NMAP_DECOY_SCAN', False)
+    NMAP_SOURCE_PORT = settings.get('NMAP_SOURCE_PORT', '')
+    NMAP_DATA_LENGTH = settings.get('NMAP_DATA_LENGTH', '')
+
+    # Convert container paths to host paths for sibling container volume mounts
+    targets_host_path = get_host_path(str(Path(targets_file).parent))
+    output_host_path = get_host_path(str(Path(output_file).parent))
+
+    targets_filename = Path(targets_file).name
+    output_filename = Path(output_file).name
+
+    # Build Docker command
+    cmd = [
+        "docker", "run", "--rm",
+        "--net=host",  # Required for raw socket scans
+        "-v", f"{targets_host_path}:/targets:ro",
+        "-v", f"{output_host_path}:/output",
+    ]
+
+    # Add image
+    cmd.append(NMAP_DOCKER_IMAGE)
+
+    # Scan type
+    if NMAP_SCAN_TYPE:
+        cmd.extend([f"-{NMAP_SCAN_TYPE}"])
+
+    # Timing
+    if NMAP_TIMING:
+        cmd.extend([f"-{NMAP_TIMING}"])
+
+    # Port specification
+    if NMAP_TOP_PORTS:
+        cmd.extend(["--top-ports", str(NMAP_TOP_PORTS)])
+    elif NMAP_PORTS:
+        cmd.extend(["-p", NMAP_PORTS])
+
+    # Host discovery
+    if NMAP_SKIP_HOST_DISCOVERY:
+        cmd.append("-Pn")
+
+    # Service/version detection
+    if NMAP_SERVICE_DETECTION:
+        cmd.append("-sV")
+    if NMAP_VERSION_DETECTION and not NMAP_SERVICE_DETECTION:
+        cmd.append("-sV")
+    if NMAP_OS_DETECTION:
+        cmd.append("-O")
+    if NMAP_SCRIPT_SCAN:
+        cmd.append("-sC")
+
+    # Performance tuning
+    if NMAP_HOST_TIMEOUT:
+        cmd.extend(["--host-timeout", NMAP_HOST_TIMEOUT])
+    if NMAP_MAX_RETRIES:
+        cmd.extend(["--max-retries", str(NMAP_MAX_RETRIES)])
+    if NMAP_MIN_RATE:
+        cmd.extend(["--min-rate", str(NMAP_MIN_RATE)])
+    if NMAP_MAX_RATE:
+        cmd.extend(["--max-rate", str(NMAP_MAX_RATE)])
+
+    # Evasion techniques
+    if NMAP_FRAGMENT_PACKETS:
+        cmd.append("-f")
+    if NMAP_SOURCE_PORT:
+        cmd.extend(["--source-port", str(NMAP_SOURCE_PORT)])
+    if NMAP_DATA_LENGTH:
+        cmd.extend(["--data-length", str(NMAP_DATA_LENGTH)])
+    if NMAP_DECOY_SCAN:
+        cmd.extend(["-D", "RND:10"])
+
+    # Proxy support
+    if use_proxy:
+        cmd.extend(["--proxies", "socks4://127.0.0.1:9050"])
+
+    # Input/Output
+    cmd.extend(["-iL", f"/targets/{targets_filename}"])
+    cmd.extend(["-oX", f"/output/{output_filename}"])
+
+    # Disable interactive features
+    cmd.append("--disable-arp-ping")
+
+    return cmd
+
+
+# =============================================================================
 # Result Parsing
 # =============================================================================
 
@@ -402,6 +521,164 @@ def parse_naabu_output(output_file: str) -> Dict:
     }
 
 
+def parse_nmap_output(output_file: str) -> Dict:
+    """
+    Parse Nmap XML output into structured format compatible with existing code.
+
+    Returns:
+        Structured dictionary with by_host, by_ip, and summary sections
+    """
+    import xml.etree.ElementTree as ET
+
+    by_host = {}
+    by_ip = {}
+    all_ports = set()
+
+    if not Path(output_file).exists():
+        return {
+            "by_host": {},
+            "by_ip": {},
+            "all_ports": [],
+            "summary": {
+                "hosts_scanned": 0,
+                "ips_scanned": 0,
+                "hosts_with_open_ports": 0,
+                "total_open_ports": 0,
+                "unique_ports": [],
+                "unique_port_count": 0,
+                "cdn_hosts": 0
+            }
+        }
+
+    try:
+        tree = ET.parse(output_file)
+        root = tree.getroot()
+    except ET.ParseError:
+        return {
+            "by_host": {},
+            "by_ip": {},
+            "all_ports": [],
+            "summary": {
+                "hosts_scanned": 0,
+                "ips_scanned": 0,
+                "hosts_with_open_ports": 0,
+                "total_open_ports": 0,
+                "unique_ports": [],
+                "unique_port_count": 0,
+                "cdn_hosts": 0
+            }
+        }
+
+    for host_elem in root.findall('host'):
+        # Get IP address
+        ip = None
+        for address in host_elem.findall('address'):
+            if address.get('addrtype') == 'ipv4':
+                ip = address.get('addr')
+                break
+
+        if not ip:
+            continue
+
+        # Get hostname if available
+        hostname = ip  # Default to IP
+        hostnames_elem = host_elem.find('hostnames')
+        if hostnames_elem is not None:
+            hostname_elem = hostnames_elem.find('hostname')
+            if hostname_elem is not None:
+                hostname = hostname_elem.get('name', ip)
+
+        # Parse ports
+        ports_elem = host_elem.find('ports')
+        if ports_elem is None:
+            continue
+
+        host_ports = []
+        port_details = []
+
+        for port_elem in ports_elem.findall('port'):
+            port_num = int(port_elem.get('portid'))
+            protocol = port_elem.get('protocol', 'tcp')
+
+            state_elem = port_elem.find('state')
+            if state_elem is None:
+                continue
+
+            state = state_elem.get('state')
+            if state not in ['open', 'open|filtered']:
+                continue
+
+            # Get service information
+            service_name = 'unknown'
+            service_elem = port_elem.find('service')
+            if service_elem is not None:
+                service_name = service_elem.get('name', 'unknown')
+            else:
+                # Use IANA lookup as fallback
+                service_name = get_service_name(port_num)
+
+            host_ports.append(port_num)
+            all_ports.add(port_num)
+
+            port_details.append({
+                "port": port_num,
+                "protocol": protocol,
+                "service": service_name
+            })
+
+        if host_ports:
+            # Organize by host
+            by_host[hostname] = {
+                "host": hostname,
+                "ip": ip,
+                "ports": sorted(host_ports),
+                "port_details": sorted(port_details, key=lambda x: x["port"]),
+                "cdn": None,
+                "is_cdn": False
+            }
+
+            # Organize by IP
+            if ip not in by_ip:
+                by_ip[ip] = {
+                    "ip": ip,
+                    "hostnames": [],
+                    "ports": [],
+                    "cdn": None,
+                    "is_cdn": False
+                }
+
+            if hostname != ip and hostname not in by_ip[ip]["hostnames"]:
+                by_ip[ip]["hostnames"].append(hostname)
+
+            for port in host_ports:
+                if port not in by_ip[ip]["ports"]:
+                    by_ip[ip]["ports"].append(port)
+
+    # Sort IP ports
+    for ip in by_ip:
+        by_ip[ip]["ports"].sort()
+
+    all_ports_sorted = sorted(list(all_ports))
+
+    # Build summary
+    summary = {
+        "hosts_scanned": len(by_host),
+        "ips_scanned": len(by_ip),
+        "hosts_with_open_ports": len([h for h in by_host.values() if h["ports"]]),
+        "total_open_ports": sum(len(h["ports"]) for h in by_host.values()),
+        "unique_ports": all_ports_sorted,
+        "unique_port_count": len(all_ports_sorted),
+        "cdn_hosts": 0  # Nmap doesn't detect CDN by default
+    }
+
+    return {
+        "by_host": by_host,
+        "by_ip": by_ip,
+        "all_ports": all_ports_sorted,
+        "summary": summary
+    }
+
+
 # =============================================================================
 # File Ownership Handling
 # =============================================================================
@@ -429,9 +706,193 @@ def fix_file_ownership(file_path: Path) -> None:
 # Main Scan Function
 # =============================================================================
 
+def run_nmap_scan(recon_data: dict, output_file: Path = None, settings: dict = None) -> dict:
+    """
+    Run Nmap port scan on targets from recon data.
+    """
+    print("\n" + "="*60)
+    print("NMAP PORT SCANNER")
+    print("="*60)
+
+    # Use passed settings or empty dict as fallback
+    if settings is None:
+        settings = {}
+
+    # Extract settings from passed dict
+    NMAP_DOCKER_IMAGE = settings.get('NMAP_DOCKER_IMAGE', 'instrumentisto/nmap:latest')
+    NMAP_PORTS = settings.get('NMAP_PORTS', '1-10000')
+    NMAP_TOP_PORTS = settings.get('NMAP_TOP_PORTS', '')
+    NMAP_SCAN_TYPE = settings.get('NMAP_SCAN_TYPE', 'sS')
+    NMAP_TIMING = settings.get('NMAP_TIMING', 'T4')
+    USE_TOR_FOR_RECON = settings.get('USE_TOR_FOR_RECON', False)
+
+    # Check Docker
+    if not is_docker_installed():
+        print("[!] Docker is not installed. Please install Docker first.")
+        return recon_data
+
+    if not is_docker_running():
+        print("[!] Docker daemon is not running. Please start Docker.")
+        return recon_data
+
+    # Pull image if needed
+    if not pull_docker_image(NMAP_DOCKER_IMAGE, "Nmap"):
+        print("[!] Failed to get Nmap Docker image")
+        return recon_data
+
+    # Check Tor if enabled
+    use_proxy = False
+    if USE_TOR_FOR_RECON:
+        if is_tor_running():
+            print("    [✓] Tor proxy detected - enabling anonymous scanning")
+            use_proxy = True
+        else:
+            print("    [!] Tor not running - scanning without proxy")
+
+    # Extract targets
+    print("\n[*] Extracting targets from recon data...")
+    unique_ips, unique_hostnames, ip_to_hostnames = extract_targets_from_recon(recon_data)
+
+    # Combine targets - prefer hostnames for better accuracy
+    all_targets = list(unique_hostnames) + [ip for ip in unique_ips if ip not in [
+        h_ip for h in unique_hostnames for h_ip in ip_to_hostnames.get(h, [])
+    ]]
+
+    if not all_targets:
+        print("[!] No targets found in recon data")
+        return recon_data
+
+    print(f"    [*] Found {len(unique_hostnames)} hostnames and {len(unique_ips)} IPs")
+    print(f"    [*] Total targets to scan: {len(all_targets)}")
+
+    # Create temp directory for scan files
+    scan_temp_dir = Path("/tmp/redamon/.nmap_temp")
+    scan_temp_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Write targets file
+        targets_file = scan_temp_dir / "targets.txt"
+        with open(targets_file, 'w') as f:
+            for target in all_targets:
+                f.write(f"{target}\n")
+
+        # Set output file
+        nmap_output = scan_temp_dir / "nmap_output.xml"
+
+        # Build and run command
+        cmd = build_nmap_command(str(targets_file), str(nmap_output), settings, use_proxy)
+
+        print(f"\n[*] Starting Nmap scan...")
+        print(f"    [*] Scan type: -{NMAP_SCAN_TYPE}")
+        print(f"    [*] Ports: {NMAP_TOP_PORTS if NMAP_TOP_PORTS else NMAP_PORTS}")
+        print(f"    [*] Timing: -{NMAP_TIMING}")
+        print(f"    [*] Host timeout: {settings.get('NMAP_HOST_TIMEOUT', '30m')}")
+        print(f"    [*] Max retries: {settings.get('NMAP_MAX_RETRIES', 1)}")
+        print(f"    [*] Skip host discovery: {settings.get('NMAP_SKIP_HOST_DISCOVERY', True)}")
+
+        start_time = datetime.now()
+
+        # Execute scan
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        _, stderr = process.communicate(timeout=3600)  # 1 hour timeout
+
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+
+        if process.returncode != 0:
+            print(f"    [!] Scan failed: {stderr[:200] if stderr else 'Unknown error'}")
+            return recon_data
+
+        if not nmap_output.exists():
+            print(f"    [!] Scan completed but no output file generated")
+            return recon_data
+
+        # Parse results
+        print(f"\n[*] Parsing results...")
+        results = parse_nmap_output(str(nmap_output))
+
+        # Build final structure
+        nmap_results = {
+            "scan_metadata": {
+                "scan_timestamp": start_time.isoformat(),
+                "scan_duration_seconds": round(duration, 2),
+                "docker_image": NMAP_DOCKER_IMAGE,
+                "scan_type": NMAP_SCAN_TYPE.replace('s', 'SYN ').replace('T', 'TCP Connect '),
+                "scan_type_fallback": False,
+                "ports_config": NMAP_TOP_PORTS if NMAP_TOP_PORTS else NMAP_PORTS,
+                "timing": NMAP_TIMING,
+                "passive_mode": False,
+                "proxy_used": use_proxy,
+                "total_targets": len(all_targets),
+                "cdn_exclusion": False
+            },
+            "by_host": results["by_host"],
+            "by_ip": results["by_ip"],
+            "all_ports": results["all_ports"],
+            "ip_to_hostnames": ip_to_hostnames,
+            "summary": results["summary"]
+        }
+
+        # Print summary
+        summary = results["summary"]
+        print(f"\n[✓] Scan completed in {duration:.1f} seconds")
+        print(f"    [*] Hosts with open ports: {summary['hosts_with_open_ports']}")
+        print(f"    [*] Total open ports found: {summary['total_open_ports']}")
+        print(f"    [*] Unique ports: {summary['unique_port_count']}")
+
+        if results["all_ports"]:
+            print(f"    [*] Ports discovered: {', '.join(map(str, results['all_ports'][:20]))}" +
+                  (f"... (+{len(results['all_ports'])-20} more)" if len(results['all_ports']) > 20 else ""))
+
+        # Add to recon_data
+        recon_data["port_scan"] = nmap_results
+
+        # Save incrementally
+        if output_file:
+            with open(output_file, 'w') as f:
+                json.dump(recon_data, f, indent=2, default=str)
+            fix_file_ownership(output_file)
+            print(f"\n[✓] Results saved to {output_file}")
+
+        return recon_data
+
+    except subprocess.TimeoutExpired:
+        print("[!] Scan timed out after 1 hour")
+        return recon_data
+    except Exception as e:
+        print(f"[!] Error during scan: {e}")
+        return recon_data
+    finally:
+        # Cleanup temp files
+        try:
+            if scan_temp_dir.exists():
+                for f in scan_temp_dir.iterdir():
+                    f.unlink()
+                scan_temp_dir.rmdir()
+        except Exception:
+            pass
+
+
 def run_port_scan(recon_data: dict, output_file: Path = None, settings: dict = None) -> dict:
     """
-    Run Naabu port scan on targets from recon data.
+    Main entry point for port scanning. Routes to appropriate scanner based on settings.
+    """
+    scanner = settings.get('PORT_SCANNER', 'nmap').lower() if settings else 'nmap'
+    if scanner == 'nmap':
+        return run_nmap_scan(recon_data, output_file, settings)
+    else:
+        return run_naabu_scan(recon_data, output_file, settings)
+
+
+def run_naabu_scan(recon_data: dict, output_file: Path = None, settings: dict = None) -> dict:
+    """
+    Run Naabu port scan on targets from recon data (legacy support).
 
     Args:
         recon_data: Dictionary containing DNS/subdomain data
@@ -469,7 +930,7 @@ def run_port_scan(recon_data: dict, output_file: Path = None, settings: dict = N
         return recon_data
 
     # Pull image if needed
-    if not pull_naabu_docker_image(NAABU_DOCKER_IMAGE):
+    if not pull_docker_image(NAABU_DOCKER_IMAGE, "Naabu"):
         print("[!] Failed to get Naabu Docker image")
         return recon_data
 

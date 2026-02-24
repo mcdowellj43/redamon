@@ -55,7 +55,30 @@ model Project {
   githubMaxCommits            Int      @default(100) @map("github_max_commits")
   githubOutputJson            Boolean  @default(true) @map("github_output_json")
 
-  // ========== NAABU PORT SCANNER ==========
+  // ========== PORT SCANNER ==========
+  portScanner                 String   @default("nmap") @map("port_scanner")
+
+  // NMAP PORT SCANNER
+  nmapDockerImage             String   @default("instrumentisto/nmap:latest") @map("nmap_docker_image")
+  nmapPorts                   String   @default("1-10000") @map("nmap_ports")
+  nmapTopPorts                String   @default("") @map("nmap_top_ports")
+  nmapScanType                String   @default("sS") @map("nmap_scan_type")
+  nmapTiming                  String   @default("T4") @map("nmap_timing")
+  nmapHostTimeout             String   @default("5m") @map("nmap_host_timeout")
+  nmapMaxRetries              Int      @default(1) @map("nmap_max_retries")
+  nmapMinRate                 String   @default("100") @map("nmap_min_rate")
+  nmapMaxRate                 String   @default("1000") @map("nmap_max_rate")
+  nmapSkipHostDiscovery       Boolean  @default(true) @map("nmap_skip_host_discovery")
+  nmapServiceDetection        Boolean  @default(false) @map("nmap_service_detection")
+  nmapVersionDetection        Boolean  @default(false) @map("nmap_version_detection")
+  nmapOsDetection             Boolean  @default(false) @map("nmap_os_detection")
+  nmapScriptScan              Boolean  @default(false) @map("nmap_script_scan")
+  nmapFragmentPackets         Boolean  @default(false) @map("nmap_fragment_packets")
+  nmapDecoyScan               Boolean  @default(false) @map("nmap_decoy_scan")
+  nmapSourcePort              String   @default("") @map("nmap_source_port")
+  nmapDataLength              String   @default("") @map("nmap_data_length")
+
+  // NAABU PORT SCANNER (LEGACY)
   naabuDockerImage            String   @default("projectdiscovery/naabu:latest") @map("naabu_docker_image")
   naabuTopPorts               String   @default("1000") @map("naabu_top_ports")
   naabuCustomPorts            String   @default("") @map("naabu_custom_ports")

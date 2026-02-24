@@ -28,6 +28,7 @@ export default function GraphPage() {
   const [hasReconData, setHasReconData] = useState(false)
   const [hasGvmData, setHasGvmData] = useState(false)
   const [hasGithubHuntData, setHasGithubHuntData] = useState(false)
+  const [hasPDFData, setHasPDFData] = useState(false)
   const [graphStats, setGraphStats] = useState<{ totalNodes: number; nodesByType: Record<string, number> } | null>(null)
   const [gvmStats, setGvmStats] = useState<{ totalGvmNodes: number; nodesByType: Record<string, number> } | null>(null)
   const [isGvmModalOpen, setIsGvmModalOpen] = useState(false)
@@ -200,36 +201,51 @@ export default function GraphPage() {
     }
   }, [projectId])
 
-  // Check for recon/GVM/GitHub Hunt data on mount and when project changes
+  // Check if PDF report data exists (same as recon data)
+  const checkPDFData = useCallback(async () => {
+    if (!projectId) return
+    try {
+      const response = await fetch(`/api/recon/${projectId}/download`, { method: 'HEAD' })
+      setHasPDFData(response.ok)
+    } catch {
+      setHasPDFData(false)
+    }
+  }, [projectId])
+
+  // Check for recon/GVM/GitHub Hunt/PDF data on mount and when project changes
   useEffect(() => {
     checkReconData()
     checkGvmData()
     checkGithubHuntData()
-  }, [checkReconData, checkGvmData, checkGithubHuntData])
+    checkPDFData()
+  }, [checkReconData, checkGvmData, checkGithubHuntData, checkPDFData])
 
   // Refresh graph data when recon completes
   useEffect(() => {
     if (reconState?.status === 'completed' || reconState?.status === 'error') {
       refetchGraph()
       checkReconData()
+      checkPDFData()
     }
-  }, [reconState?.status, refetchGraph, checkReconData])
+  }, [reconState?.status, refetchGraph, checkReconData, checkPDFData])
 
   // Refresh graph when GVM scan completes
   useEffect(() => {
     if (gvmState?.status === 'completed' || gvmState?.status === 'error') {
       refetchGraph()
       checkGvmData()
+      checkPDFData()
     }
-  }, [gvmState?.status, refetchGraph, checkGvmData])
+  }, [gvmState?.status, refetchGraph, checkGvmData, checkPDFData])
 
   // Refresh when GitHub Hunt completes
   useEffect(() => {
     if (githubHuntState?.status === 'completed' || githubHuntState?.status === 'error') {
       refetchGraph()
       checkGithubHuntData()
+      checkPDFData()
     }
-  }, [githubHuntState?.status, refetchGraph, checkGithubHuntData])
+  }, [githubHuntState?.status, refetchGraph, checkGithubHuntData, checkPDFData])
 
   const handleToggleAI = useCallback(() => {
     setIsAIOpen((prev) => !prev)
@@ -329,6 +345,11 @@ export default function GraphPage() {
     setActiveLogsDrawer(prev => prev === 'githubHunt' ? null : 'githubHunt')
   }, [])
 
+  const handleDownloadPDFReport = useCallback(async () => {
+    if (!projectId) return
+    window.open(`/api/recon/${projectId}/download?format=html`, '_blank')
+  }, [projectId])
+
   // Show message if no project is selected
   if (!projectLoading && !projectId) {
     return (
@@ -378,6 +399,9 @@ export default function GraphPage() {
         githubHuntStatus={githubHuntState?.status || 'idle'}
         hasGithubHuntData={hasGithubHuntData}
         isGithubHuntLogsOpen={activeLogsDrawer === 'githubHunt'}
+        // PDF Report
+        onDownloadPDFReport={handleDownloadPDFReport}
+        hasPDFData={hasPDFData}
         // Stealth mode
         stealthMode={currentProject?.stealthMode}
       />

@@ -28,8 +28,11 @@ WORKDIR /app
 # - Git for installing knock-subdomains
 # - Build tools for Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Docker CLI (to communicate with host Docker daemon)
-    docker.io \
+    # System dependencies for Docker installation
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
     # Tor and proxychains for anonymous scanning
     tor \
     proxychains4 \
@@ -37,7 +40,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dnsutils \
     bind9-host \
     # Network tools
-    curl \
     wget \
     netcat-openbsd \
     iputils-ping \
@@ -47,9 +49,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libffi-dev \
     libssl-dev \
-    # Clean up apt cache
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# Install Docker CLI from official Docker repository (latest version)
+RUN mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
 
 # Configure proxychains for Tor
 # Use dynamic_chain for better reliability
@@ -66,7 +75,8 @@ RUN mkdir -p /var/run/tor && \
     echo "Log notice stdout" >> /etc/tor/torrc
 
 # Create non-root user for security (but allow Docker access)
-RUN groupadd -r redamon && \
+RUN groupadd -r docker && \
+    groupadd -r redamon && \
     useradd -r -g redamon -G docker redamon && \
     mkdir -p /home/redamon && \
     chown -R redamon:redamon /home/redamon
@@ -100,7 +110,7 @@ COPY recon/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Create volume mount points (NOT /app/recon/output - that's bind-mounted by the orchestrator)
-VOLUME ["/var/run/docker.sock", "/data"]
+VOLUME ["/data"]
 
 # Expose Tor SOCKS port (if using container's Tor)
 EXPOSE 9050

@@ -227,6 +227,32 @@
   color: var(--text-on-accent);
 }
 
+/* PDF Report Button */
+.pdfButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-1) var(--space-2-5);
+  background: transparent;
+  border: 1px solid #8b5cf6;
+  border-radius: var(--radius-md);
+  color: #8b5cf6;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: var(--transition-all);
+}
+
+.pdfButton:hover:not(:disabled) {
+  background: #8b5cf6;
+  color: white;
+}
+
+.pdfButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Recon Buttons */
 .reconButton {
   display: flex;

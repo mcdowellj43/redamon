@@ -178,13 +178,12 @@ class ContainerManager:
                     rm=True,
                 )
 
-            # Start container with environment variables
-            container = self.client.containers.run(
+            # Create container with environment variables
+            container = self.client.containers.create(
                 self.recon_image,
                 name=container_name,
-                detach=True,
                 network_mode="host",
-                cap_add=["NET_RAW", "NET_ADMIN"],
+                privileged=True,
                 environment={
                     "PROJECT_ID": project_id,
                     "USER_ID": user_id,
@@ -200,7 +199,7 @@ class ContainerManager:
                     "NEO4J_PASSWORD": os.environ.get("NEO4J_PASSWORD", ""),
                 },
                 volumes={
-                    "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "ro"},
+                    "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
                     # Mount source code for development (no rebuild needed)
                     # Note: rw needed because output/data are subdirectories
                     f"{recon_path}": {"bind": "/app/recon", "mode": "rw"},
@@ -211,6 +210,9 @@ class ContainerManager:
                 },
                 command="python /app/recon/main.py",
             )
+
+            # Start the container
+            container.start()
 
             state.container_id = container.id
             state.status = ReconStatus.RUNNING
