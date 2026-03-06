@@ -2,31 +2,43 @@
   <img src="assets/logo.png" alt="RedAmon Logo" width="120"/>
   <br/>
   <img src="assets/title.svg" alt="RedAmon" width="340"/>
+  <br/>
+  <b><i><big><big>Unmask the hidden before the world does.</big></big></i></b>
+</p>
+<p align="center" style="font-size: 120%;">
+  An autonomous AI framework that chains reconnaissance, exploitation, and post-exploitation into a single pipeline, then goes further by triaging every finding, implementing code fixes, and opening pull requests on your repository. From first packet to merged patch, no human intervention required.
 </p>
 
-<h3 align="center">Unmask the hidden before the world does.</h3>
+<br/>
 
 <p align="center">
-  An AI-powered agentic red team framework that automates offensive security operations, from reconnaissance to exploitation to post-exploitation, with zero human intervention.
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/v1.3.0-release-2E8B57?style=for-the-badge" alt="Version 1.3.0"/>
+  <img src="https://img.shields.io/badge/v2.2.0-release-2E8B57?style=for-the-badge" alt="Version 2.2.0"/>
   <img src="https://img.shields.io/badge/WARNING-SECURITY%20TOOL-B22222?style=for-the-badge" alt="Security Tool Warning"/>
   <img src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=for-the-badge" alt="MIT License"/>
   <br/>
+  <img src="https://img.shields.io/badge/FULL-KILL%20CHAIN-A01025?style=for-the-badge" alt="Full Kill Chain"/>
   <img src="https://img.shields.io/badge/AI-AUTONOMOUS%20AGENT-6A5ACD?style=for-the-badge&logo=openai&logoColor=white" alt="AI Powered"/>
-  <img src="https://img.shields.io/badge/400+-AI%20MODELS-04A878?style=for-the-badge&logo=huggingface&logoColor=white" alt="400+ AI Models"/>
   <img src="https://img.shields.io/badge/ZERO-HUMAN%20INTERVENTION-CC7722?style=for-the-badge" alt="Zero Click"/>
   <img src="https://img.shields.io/badge/Kali-Powered-466A7A?style=for-the-badge&logo=kalilinux&logoColor=white" alt="Kali Powered"/>
   <img src="https://img.shields.io/badge/Docker-Compose-1A7EC2?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
-  <br/>
-  <img src="https://img.shields.io/badge/FULL-KILL%20CHAIN-A01025?style=for-the-badge" alt="Full Kill Chain"/>
-  <img src="https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F-STEALTH%20MODE-1a1a2e?style=for-the-badge" alt="Stealth Mode"/>
+  <img src="https://img.shields.io/badge/IP%2FCIDR-TARGETING-0D7377?style=for-the-badge" alt="IP/CIDR Targeting"/>
+  <img src="https://img.shields.io/badge/Stealth-Mode-5B21B6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MDAgNjAwIiBmaWxsPSJ3aGl0ZSI+PHBvbHlnb24gcG9pbnRzPSI0MDAsODAgODAwLDQyMCA3MjAsNDIwIDY4MCwzODAgNjIwLDQyMCA1NjAsMzgwIDUwMCw0MjAgNDQwLDM4MCAzODAsNDIwIDMyMCwzODAgMjYwLDQyMCAyMDAsMzgwIDEyMCw0MjAgMCw0MjAiLz48L3N2Zz4=&logoColor=white" alt="Stealth Mode"/>
   <img src="https://img.shields.io/badge/30+-SECURITY%20TOOLS-CC8F00?style=for-the-badge&logo=hack-the-box&logoColor=white" alt="30+ Security Tools"/>
-  <img src="https://img.shields.io/badge/9,000+-VULN%20TEMPLATES-C2185B?style=for-the-badge" alt="9,000+ Vuln Templates"/>
-  <img src="https://img.shields.io/badge/170K+-NETWORK%20NVTs-8E3FA0?style=for-the-badge" alt="170K+ NVTs"/>
+  <img src="https://img.shields.io/badge/185,000+-DETECTION%20RULES-8B1142?style=for-the-badge" alt="185,000+ Detection Rules"/>
   <img src="https://img.shields.io/badge/180+-PROJECT%20SETTINGS-00899B?style=for-the-badge" alt="180+ Settings"/>
+  <img src="https://img.shields.io/badge/400+-AI%20MODELS-04A878?style=for-the-badge&logo=huggingface&logoColor=white" alt="400+ AI Models"/>
+  <img src="https://img.shields.io/badge/%F0%9F%96%A5%EF%B8%8F_LOCAL%20MODELS-OLLAMA%20%7C%20vLLM%20%7C%20LM%20Studio-B85C00?style=for-the-badge" alt="Local Models Support"/>
+  <br/>
+  <img src="https://img.shields.io/badge/Metasploit-Framework-1A6DAA?style=for-the-badge" alt="Metasploit Framework"/>
+  <img src="https://img.shields.io/badge/OpenVAS-Scanner-66B245?style=for-the-badge" alt="OpenVAS Scanner"/>
+  <img src="https://img.shields.io/badge/Nmap-Scanner-4682B4?style=for-the-badge" alt="Nmap Scanner"/>
+  <img src="https://img.shields.io/badge/Nuclei-Scanner-7B42BC?style=for-the-badge" alt="Nuclei Scanner"/>
+  <img src="https://img.shields.io/badge/SQLMap-Injection-C0392B?style=for-the-badge" alt="SQLMap"/>
+  <img src="https://img.shields.io/badge/Hydra-Brute%20Force-E67E22?style=for-the-badge" alt="Hydra Brute Force"/>
+  <img src="https://img.shields.io/badge/CypherFix-Auto%20Remediation-00B894?style=for-the-badge" alt="CypherFix Auto Remediation"/>
+  <br/>
+  <a href="https://github.com/samugit83/redamon/wiki"><img src="https://img.shields.io/badge/📖_WIKI-FULL%20DOCUMENTATION-1A73E8?style=for-the-badge" alt="Wiki Documentation"/></a>
+  <a href="https://github.com/users/samugit83/projects/1"><img src="https://img.shields.io/badge/📋_ROADMAP-CONTRIBUTE-00C853?style=for-the-badge" alt="Roadmap & Contribute"/></a>
 </p>
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security testing**, **educational purposes**, and **research only**. Never use this system to scan, probe, or attack any system you do not own or have explicit written permission to test. Unauthorized access is **illegal** and punishable by law. By using this tool, you accept **full responsibility** for your actions. **[Read Full Disclaimer](DISCLAIMER.md)**
@@ -34,6 +46,53 @@
 <p align="center">
   <img src="assets/agent.gif" alt="RedAmon Agent Demo" width="100%"/>
 </p>
+<p align="center">
+  <a href="https://youtu.be/afViJUit0xE"><img src="https://img.shields.io/badge/▶_WATCH_DEMO-3_Parallel_Agents-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Demo"/></a>
+</p>
+<p align="center">
+  <em>Three AI agents attack simultaneously — one brute-forces SSH credentials with Hydra, one chains a CVE to escalate to root and defaces the homepage, one hunts down every XSS vulnerability on the frontend.</em>
+</p>
+
+<br/>
+
+<h1 align="center"><span style="color:#D48A8A">Offense</span> meets <span style="color:#8AAED4">defense</span>, one pipeline, zero handoffs.</h1>
+<p align="center">
+<b><samp><big>Reconnaissance ➜ Exploitation ➜ Post-Exploitation ➜ AI Triage ➜ CodeFix Agent ➜ GitHub PR</big></samp></b>
+<br/><br/>
+RedAmon doesn't stop at finding vulnerabilities, it fixes them. The pipeline starts with a 6-phase reconnaissance engine that maps your target's entire attack surface, then hands control to an autonomous AI agent that exploits CVEs, brute-forces credentials, and pivots through networks. Every finding is recorded in a Neo4j knowledge graph. When the offensive phase completes, CypherFix takes over: an AI triage agent correlates hundreds of findings, deduplicates them, and ranks them by exploitability. Then a CodeFix agent clones your repository, navigates the codebase with 11 code-aware tools, implements targeted fixes, and opens a GitHub pull request, ready for review and merge.
+</p>
+
+<p align="center">
+<img src="assets/cypherfix.gif" alt="CypherFix demo" width="100%"/>
+</p>
+
+---
+
+## Roadmap & Community Contributions
+
+We maintain a public **[Project Board](https://github.com/users/samugit83/projects/1)** with upcoming features open for community contributions. Pick a task and submit a PR!
+
+| Feature | Status | Issue |
+|---------|--------|-------|
+| AI-Generated Pentest Reports | Partial | [#37](https://github.com/samugit83/redamon/issues/37) |
+| Continuous Attack Surface Monitoring | New | [#38](https://github.com/samugit83/redamon/issues/38) |
+| Attack Path Kill Chain Visualization | Partial | [#39](https://github.com/samugit83/redamon/issues/39) |
+| Cloud Security Assessment | Partial | [#40](https://github.com/samugit83/redamon/issues/40) |
+| Dark Web & Leaked Creds Monitor | New | [#41](https://github.com/samugit83/redamon/issues/41) |
+| Compliance Framework Mapping | New | [#42](https://github.com/samugit83/redamon/issues/42) |
+| API Security & GraphQL Fuzzing | Partial | [#43](https://github.com/samugit83/redamon/issues/43) |
+| Attack Path: Active Directory Chain | New | [#44](https://github.com/samugit83/redamon/issues/44) |
+| Attack Path: Web Application Chain | New | [#45](https://github.com/samugit83/redamon/issues/45) |
+| Attack Path: Credential Capture & MITM | New | [#46](https://github.com/samugit83/redamon/issues/46) |
+| Attack Path: Local Privilege Escalation | New | [#47](https://github.com/samugit83/redamon/issues/47) |
+| Attack Path: Client-Side Browser Exploitation | New | [#48](https://github.com/samugit83/redamon/issues/48) |
+| Agent Tool Expansion (Shodan, Dorking, Python, Memory) | New | [#49](https://github.com/samugit83/redamon/issues/49) |
+| Agent Intelligence: Hierarchical Planning | New | [#50](https://github.com/samugit83/redamon/issues/50) |
+| Agent Intelligence: Reflexion & Episodic Memory | New | [#51](https://github.com/samugit83/redamon/issues/51) |
+| Agent Intelligence: Metacognitive Monitoring | New | [#52](https://github.com/samugit83/redamon/issues/52) |
+| Agent Intelligence: RAG Pentesting Knowledge Base | New | [#53](https://github.com/samugit83/redamon/issues/53) |
+
+> **Want to contribute?** See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
 
 ---
 
@@ -44,6 +103,18 @@
 - [Docker](https://docs.docker.com/get-docker/) & Docker Compose v2+
 
 That's it. No Node.js, Python, or security tools needed on your host.
+
+#### Minimum System Requirements
+
+| Resource | Without OpenVAS | With OpenVAS (full stack) |
+|----------|----------------|--------------------------|
+| **CPU** | 2 cores | 4 cores |
+| **RAM** | 4 GB | 8 GB (16 GB recommended) |
+| **Disk** | 20 GB free | 50 GB free |
+
+> **Without OpenVAS** runs 6 containers: webapp, postgres, neo4j, agent, kali-sandbox, recon-orchestrator.
+> **With OpenVAS** adds 4 more runtime containers (gvmd, ospd-openvas, gvm-postgres, gvm-redis) plus ~8 one-shot data-init containers for vulnerability feeds (~170K+ NVTs). First launch takes ~30 minutes for GVM feed synchronization.
+> Dynamic recon and scan containers are spawned on-demand during operations and require additional resources.
 
 ### 1. Clone & Configure
 
@@ -63,6 +134,8 @@ Get your key from [Anthropic Console](https://console.anthropic.com/) or [OpenAI
 
 **Additional AI providers** (optional — add these to unlock more models):
 ```env
+OPENAI_COMPAT_BASE_URL=http://host.docker.internal:11434/v1  # Ollama on the same machine (see below for remote servers)
+OPENAI_COMPAT_API_KEY=                                        # optional (fallback token "ollama" is used if empty)
 OPENROUTER_API_KEY=sk-or-...   # OpenRouter — access 300+ models (Llama, Gemini, Mistral, etc.) via openrouter.ai
 AWS_ACCESS_KEY_ID=AKIA...      # AWS Bedrock — access foundation models (Claude, Titan, Llama, etc.)
 AWS_SECRET_ACCESS_KEY=...      # AWS Bedrock secret key
@@ -74,15 +147,12 @@ The model selector in the project settings **dynamically fetches** available mod
 ```env
 TAVILY_API_KEY=tvly-...        # Web search for the AI agent — get one at tavily.com
 NVD_API_KEY=...                # NIST NVD API — higher rate limits for CVE lookups — nist.gov/developers
+NGROK_AUTHTOKEN=...            # ngrok TCP tunnel for reverse shells (single port) — dashboard.ngrok.com
+CHISEL_SERVER_URL=...          # chisel TCP tunnel (multi-port, requires VPS) — github.com/jpillora/chisel
+CHISEL_AUTH=user:pass          # optional chisel server authentication
 ```
 
 ### 2. Build & Start
-
-```bash
-docker compose --profile tools build          # Build all images (recon + vuln-scanner + services)
-docker compose up -d                          # Start all services (first GVM run takes ~30 min for feed sync)
-                                              # Total image size: ~15 GB
-```
 
 **Without GVM (lighter, faster startup):**
 ```bash
@@ -90,28 +160,23 @@ docker compose --profile tools build          # Build all images
 docker compose up -d postgres neo4j recon-orchestrator kali-sandbox agent webapp   # Start core services only
 ```
 
+**Complete, With GVM:**
+```bash
+docker compose --profile tools build          # Build all images (recon + vuln-scanner + services)
+docker compose up -d                          # Start all services (first GVM run takes ~30 min for feed sync)
+                                              # Total image size: ~15 GB
+```
+
+
 ### 3. Open the Webapp
 
 Go to **http://localhost:3000** — create a project, configure your target, and start scanning.
 
-### Services
-
-| Service | URL |
-|---------|-----|
-| **Webapp** | http://localhost:3000 |
-| Neo4j Browser | http://localhost:7474 |
-| Recon Orchestrator | http://localhost:8010 |
-| Agent API | http://localhost:8090 |
-| MCP Network Recon (curl + naabu) | http://localhost:8000 |
-| MCP Nuclei | http://localhost:8002 |
-| MCP Metasploit | http://localhost:8003 |
-| MCP Nmap | http://localhost:8004 |
+> For a detailed walkthrough of every feature, check the **[Wiki](https://github.com/samugit83/redamon/wiki)**.
 
 ### Common Commands
 
 ```bash
-docker compose up -d                        # Start all services (including GVM)
-docker compose down                         # Stop all services (keeps data)
 docker compose ps                           # Check service status
 docker compose logs -f                      # Follow all logs
 docker compose logs -f webapp               # Webapp (Next.js)
@@ -136,14 +201,17 @@ docker compose --profile tools down --rmi local --volumes --remove-orphans
 
 For active development with **Next.js fast refresh** (no rebuild on every change):
 
+**Without GVM (lighter, faster startup):**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j recon-orchestrator kali-sandbox agent webapp
+
+```
+**Complete, With GVM:**
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
-**Without GVM (lighter, faster startup):**
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j recon-orchestrator kali-sandbox agent webapp
-```
+
 
 The first command starts **all** services including GVM/OpenVAS (which requires a ~30 min feed sync on first run). The second command starts only the core services, skipping GVM entirely — useful when you don't need network-level vulnerability scanning and want a faster, lighter stack.
 
@@ -162,22 +230,32 @@ docker compose restart kali-sandbox       # MCP tool servers
 
 No rebuild needed — just restart.
 
+> If you need to update RedAmon to a new version, see [Updating to a New Version](#updating-to-a-new-version).
+
 ---
 
 ## Table of Contents
 
+- [Full Wiki Documentation](https://github.com/samugit83/redamon/wiki)
 - [Overview](#overview)
   - [Reconnaissance Pipeline](#reconnaissance-pipeline)
   - [AI Agent Orchestrator](#ai-agent-orchestrator)
+  - [Attack Path Routing](#attack-path-routing)
   - [AI Model Providers](#ai-model-providers)
+  - [Local Models & OpenAI-Compatible Providers](#openai-compatible-provider)
   - [GitHub Secret Hunter](#github-secret-hunter)
   - [GVM Vulnerability Scanner](#gvm-vulnerability-scanner-optional)
   - [Attack Surface Graph](#attack-surface-graph)
+  - [EvoGraph — Attack Chain Evolution](#evograph--attack-chain-evolution)
+  - [Multi-Session Parallel Attack Chains](#multi-session-parallel-attack-chains)
+  - [Remote Shells — Live Session Interaction](#remote-shells--live-session-interaction)
+  - [CypherFix — Automated Vulnerability Remediation](#cypherfix--automated-vulnerability-remediation)
   - [Project Settings](#project-settings)
 - [System Architecture](#system-architecture)
   - [High-Level Architecture](#high-level-architecture)
   - [Data Flow Pipeline](#data-flow-pipeline)
   - [Docker Container Architecture](#docker-container-architecture)
+  - [Exposed Services & Ports](#exposed-services--ports)
 - [Components](#components)
   - [Reconnaissance Pipeline](#1-reconnaissance-pipeline)
   - [Graph Database](#2-graph-database)
@@ -199,6 +277,8 @@ No rebuild needed — just restart.
   - [Protocols & Communication](#protocols--communication)
 - [Development Mode](#development-mode)
 - [Documentation](#documentation)
+- [Data Export & Import](#data-export--import)
+- [Updating to a New Version](#updating-to-a-new-version)
 - [Legal](#legal)
 
 ---
@@ -207,20 +287,34 @@ No rebuild needed — just restart.
 
 RedAmon is a modular, containerized penetration testing framework that chains automated reconnaissance, AI-driven exploitation, and graph-powered intelligence into a single, end-to-end offensive security pipeline. Every component runs inside Docker — no tools installed on your host — and communicates through well-defined APIs so each layer can evolve independently.
 
-The platform is built around four pillars:
+The platform is built around six pillars:
 
 | Pillar | What it does |
 |--------|-------------|
-| **Reconnaissance Pipeline** | Six sequential scanning phases that map your target's entire attack surface — from subdomain discovery to vulnerability detection — and store the results as a rich, queryable graph. Complemented by standalone GVM network scanning and GitHub secret hunting modules. |
+| **Reconnaissance Pipeline** | Six sequential scanning phases that map your target's entire attack surface — starting from a domain **or IP addresses / CIDR ranges** — from subdomain discovery to vulnerability detection — and store the results as a rich, queryable graph. Complemented by standalone GVM network scanning and GitHub secret hunting modules. |
 | **AI Agent Orchestrator** | A LangGraph-based autonomous agent that reasons about the graph, selects security tools via MCP, transitions through informational / exploitation / post-exploitation phases, and can be steered in real-time via chat. |
 | **Attack Surface Graph** | A Neo4j knowledge graph with 17 node types and 20+ relationship types that serves as the single source of truth for every finding — and the primary data source the AI agent queries before every decision. |
+| **EvoGraph** | A persistent, evolutionary attack chain graph in Neo4j that tracks every step, finding, decision, and failure across the attack lifecycle — bridging the recon graph and enabling cross-session intelligence accumulation. |
+| **CypherFix** | Automated vulnerability remediation pipeline — an AI triage agent correlates and prioritizes findings from the graph, then a CodeFix agent clones the target repository, implements fixes using a ReAct loop with 11 code tools, and opens a GitHub pull request. |
 | **Project Settings Engine** | 180+ per-project parameters — exposed through the webapp UI — that control every tool's behavior, from Naabu thread counts to Nuclei severity filters to agent approval gates. |
 
 ---
 
 ### Reconnaissance Pipeline
 
-The recon pipeline is a fully automated, six-phase scanning engine that runs inside a Kali Linux container. Given a single root domain (or a specific subdomain list), it progressively builds a complete picture of the target's external attack surface. Each phase feeds its output into the next, and the final result is both a structured JSON file and a populated Neo4j graph.
+The recon pipeline is a fully automated, six-phase scanning engine that runs inside a Kali Linux container. Given a single root domain, a specific subdomain list, or a set of **IP addresses / CIDR ranges**, it progressively builds a complete picture of the target's external attack surface. Each phase feeds its output into the next, and the final result is both a structured JSON file and a populated Neo4j graph.
+
+#### IP/CIDR Targeting Mode
+
+When a project is created with **"Start from IP"** enabled, the pipeline starts from IP addresses instead of a domain. It accepts individual IPs (`192.168.1.1`), IPv6 addresses, and CIDR ranges (`10.0.0.0/24`, max /24 = 256 hosts). The pipeline:
+
+1. **Expands CIDRs** into individual host IPs (network and broadcast addresses excluded)
+2. **Reverse DNS (PTR)** resolves each IP to its hostname — when no PTR exists, a mock hostname is generated
+3. **IP WHOIS** retrieves organization, country, and ASN data for each IP
+4. Creates a **mock Domain node** (`ip-targets.{project_id}`) in Neo4j as the graph root, with Subdomain nodes for each resolved hostname
+5. Continues the normal pipeline: port scan → HTTP probe → resource enumeration → vulnerability scan → MITRE enrichment
+
+GAU (passive URL archives) is automatically skipped in IP mode since archives index by domain. All other tools work unchanged.
 
 <p align="center">
   <img src="assets/recon.gif" alt="RedAmon Reconnaissance Pipeline" width="100%"/>
@@ -289,7 +383,7 @@ All results are combined into a single JSON file (`recon/output/recon_{PROJECT_I
 
 #### Running Reconnaissance
 
-1. Create a project with target domain and settings
+1. Create a project with a target domain (or enable "Start from IP" and enter IPs/CIDRs)
 2. Navigate to Graph page
 3. Click "Start Recon" button
 4. Watch real-time logs in the drawer
@@ -357,12 +451,14 @@ The agent progresses through three distinct operational phases, each with differ
 
 **Informational Phase** — The default starting phase. The agent gathers intelligence by querying the Neo4j graph, running web searches for CVE details, performing HTTP requests with curl, and scanning ports with Naabu. No offensive tools are available. The agent analyzes the attack surface, identifies high-value targets, and builds a mental model of what's exploitable.
 
-**Exploitation Phase** — When the agent identifies a viable attack path, it requests a phase transition. This requires **user approval** (configurable). Once approved, the agent gains access to the Metasploit console via MCP and can execute exploits. Two attack paths are supported:
+**Exploitation Phase** — When the agent identifies a viable attack path, it requests a phase transition. This requires **user approval** (configurable). Once approved, the agent gains access to the Metasploit console via MCP and can execute exploits. Four attack path types are supported:
 
-- **CVE Exploit** — the agent searches for a matching Metasploit module, configures the payload (reverse shell or bind shell), sets target parameters, and fires the exploit. For statefull mode, it establishes a Meterpreter session; for stateless mode, it executes one-shot commands.
-- **Brute Force Credential Guess** — the agent selects appropriate wordlists and attacks services like SSH, FTP, or MySQL, with configurable maximum attempts per wordlist.
+- **CVE Exploit** — the agent searches for a matching Metasploit module, configures the payload (reverse shell or bind shell), sets target parameters, and fires the exploit. For statefull mode, it establishes a Meterpreter session; for stateless mode, it executes one-shot commands. Two **tunnel providers** are supported for NAT/cloud environments: **ngrok** (free, single port 4444, stageless only) and **chisel** (multi-port 4444 + 8080, staged + stageless, requires VPS). When a tunnel is enabled, LHOST and LPORT are auto-detected — no manual port forwarding needed. Chisel also enables web delivery and HTA delivery attacks that require two ports.
+- **Hydra Brute Force** — the agent uses THC Hydra to brute force credentials against services like SSH, FTP, RDP, SMB, MySQL, HTTP forms, and 50+ other protocols. Hydra settings (threads, timeouts, extra checks) are fully configurable per project. After credentials are discovered, the agent establishes access via `sshpass`, database clients, or Metasploit psexec.
+- **Phishing / Social Engineering** — the agent generates malicious payloads (msfvenom executables, Office macro documents, PDFs, web delivery one-liners, HTA servers) and delivers them via email (Python smtplib with configurable SMTP settings), chat download (`docker cp`), or web link. A 6-step workflow guides the agent through target platform selection, handler setup, payload generation, verification, delivery, and session callback. SMTP settings are configured per project in the Attack Paths tab.
+- **Unclassified Fallback** — for techniques that don't match CVE exploit, brute force, or phishing (e.g., SQL injection, XSS, SSRF, file upload). The agent dynamically classifies the attack type and uses available tools generically without a mandatory workflow. These appear with a grey badge and a `-unclassified` suffix in the classification.
 
-When an exploit succeeds, the agent automatically creates an **Exploit node** in the Neo4j graph — recording the attack type, target IP, port, CVE IDs, Metasploit module used, payload, session ID, and any credentials discovered. This node is linked to the targeted IP, the exploited CVE, and the entry port, making every successful compromise a permanent, queryable part of the attack surface graph.
+When an exploit succeeds, the agent records a **ChainFinding(exploit_success)** in the [EvoGraph](#evograph--attack-chain-evolution) — recording the attack type, target IP, port, CVE IDs, Metasploit module, payload, session ID, and credentials discovered. This finding is linked to the attack chain step that produced it and bridged to the targeted IP and exploited CVE in the recon graph, making every successful compromise a permanent, queryable, and cross-session-accessible part of the knowledge graph.
 
 <p align="center">
   <img src="assets/exploit.gif" alt="RedAmon Exploitation Demo" width="100%"/>
@@ -404,10 +500,11 @@ The agent executes security tools through the **Model Context Protocol**, with e
 | **execute_nuclei** | Vulnerability scanning with 9,000+ templates | All phases |
 | **kali_shell** | Direct Kali Linux shell commands (arbitrary command execution) | All phases |
 | **execute_code** | Run custom Python/Bash exploit scripts on the Kali sandbox | Exploitation & Post-exploitation |
+| **execute_hydra** | THC Hydra brute force password cracking (50+ protocols) | Exploitation & Post-exploitation |
 | **metasploit_console** | Exploit execution, payload delivery, sessions | Exploitation & Post-exploitation |
 | **msf_restart** | Restart Metasploit RPC daemon when it becomes unresponsive | Exploitation & Post-exploitation |
 
-For long-running Metasploit operations (e.g., brute force with large wordlists), the agent streams progress updates every 5 seconds to the WebSocket, so you see output in real time.
+For long-running operations (e.g., Hydra brute force with large wordlists, Metasploit exploits), the agent streams progress updates every 5 seconds to the WebSocket, so you see output in real time.
 
 #### Kali Sandbox Tooling
 
@@ -469,29 +566,34 @@ The architecture supports **10 attack path categories** (CVE exploitation, brute
 | # | Attack Path | Description | Module Type | Post-Exploitation |
 |---|-------------|-------------|-------------|-------------------|
 | 1 | **CVE-Based Exploitation** | Exploits known vulnerabilities identified by CVE identifier. The agent searches for a matching Metasploit exploit module, configures target parameters and payload (reverse/bind shell), and fires the exploit. Supports both statefull (Meterpreter session) and stateless (one-shot command) post-exploitation. | `exploit/*` | Yes |
-| 2 | **Brute Force / Credential Guess** | Password guessing attacks against authentication services (SSH, FTP, MySQL, SMB, HTTP, and more). The agent selects the appropriate `auxiliary/scanner/*/login` module, configures wordlists from Metasploit's built-in collection, and runs the attack. When SSH brute force succeeds with `CreateSession: true`, the agent transitions to a shell-based post-exploitation phase. | `auxiliary/scanner/*` | Sometimes (SSH) |
+| 2 | **Hydra Brute Force** | Password guessing attacks against 50+ authentication protocols (SSH, FTP, RDP, SMB, MySQL, HTTP forms, and more). The agent uses THC Hydra (`execute_hydra`) with configurable threads, timeouts, and retry strategies. After credentials are discovered, the agent establishes access via `sshpass` (SSH), database clients, or Metasploit psexec (SMB). | `execute_hydra` | Sometimes (SSH, SMB) |
+| 3 | **Phishing / Social Engineering** | Generates malicious payloads (msfvenom), weaponized documents (Office macros, PDF, RTF, LNK), web delivery one-liners, and HTA servers. Delivers via email (smtplib), chat download (docker cp), or web link. 6-step guided workflow with handler setup and session callback. | `msfvenom`, `fileformat/*`, `web_delivery` | Yes |
+| 4 | **Unclassified Fallback** | Dynamic classification for techniques that don't match CVE, brute force, or phishing (e.g., `sql_injection-unclassified`, `ssrf-unclassified`). The agent uses all available tools generically without a mandatory workflow. | Any available | Depends on technique |
 
-For full details on all 10 attack path categories, the intent router architecture, chain-specific workflows, and the implementation roadmap, see the **[Attack Paths Documentation](agentic/README.ATTACK_PATHS.md)**.
+For full details on all 10 attack path categories, the intent router architecture, chain-specific workflows, and the implementation roadmap, see the **[Attack Paths Documentation](agentic/readmes/README.ATTACK_PATHS.md)**.
 
 ---
 
 ### AI Model Providers
 
-RedAmon supports **four AI providers** out of the box, giving you access to **400+ language models** through a single, unified interface. The model selector in the project settings **dynamically fetches** available models from each provider whose API key is configured — no hardcoded lists, no manual updates. When a provider releases a new model, it appears automatically.
+RedAmon supports **five AI providers** out of the box, giving you access to **400+ language models** through a single, unified interface. The model selector in the project settings **dynamically fetches** available models from each configured provider — no hardcoded lists, no manual updates. When a provider releases a new model, it appears automatically.
 
 | Provider | Models | Pricing | API Key Required |
 |----------|--------|---------|-----------------|
 | **OpenAI** (Direct) | ~30 chat models — GPT-5.2, GPT-5, GPT-4.1, o3, o4-mini, and more | Pay-per-token via OpenAI | `OPENAI_API_KEY` |
 | **Anthropic** (Direct) | ~15 models — Claude Opus 4.6, Sonnet 4.6/4.5, Haiku 4.5 | Pay-per-token via Anthropic | `ANTHROPIC_API_KEY` |
+| **OpenAI-Compatible** | Any self-hosted or third-party OpenAI-compatible API (for example Ollama, local gateways, proxies). Model lists come directly from your backend; choose chat-capable models manually | Depends on your backend | `OPENAI_COMPAT_BASE_URL` (`OPENAI_COMPAT_API_KEY` optional) |
 | **OpenRouter** | **300+ models** — Llama 4, Gemini 3, Mistral, Qwen, DeepSeek, Command R+, and hundreds more from 50+ providers routed through a single API | Variable per model (some free) | `OPENROUTER_API_KEY` |
 | **AWS Bedrock** | ~60 foundation models — Claude, Titan, Llama, Cohere Command, Mistral, AI21 Jamba, and more | Pay-per-token via AWS | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` |
 
 #### How It Works
 
-1. **API key detection** — On startup, the agent checks which provider API keys are set in the environment. Only providers with valid keys are queried.
-2. **Dynamic model fetching** — The agent's `/models` endpoint fetches available models from all configured providers in parallel (OpenAI API, Anthropic API, OpenRouter API, AWS Bedrock `ListFoundationModels`). Results are cached for 1 hour.
+1. **Provider detection** — On startup, the agent checks which provider credentials/URLs are set in the environment. Only configured providers are queried.
+2. **Dynamic model fetching** — The agent's `/models` endpoint fetches available models from all configured providers in parallel (OpenAI API, Anthropic API, OpenAI-compatible `/models`, OpenRouter API, AWS Bedrock `ListFoundationModels`). Results are cached for 1 hour.
 3. **Searchable model selector** — The project settings UI presents a searchable dropdown grouped by provider. Each model shows its name, context window size, and pricing info. Type to filter across all providers instantly.
-4. **Provider prefix convention** — Models are stored with a provider prefix (`openrouter/`, `bedrock/`) so the agent knows which SDK to use at runtime. OpenAI and Anthropic models are detected by name pattern (no prefix needed). Existing projects continue to work unchanged.
+4. **Provider prefix convention** — Models are stored with a provider prefix (`openai_compat/`, `openrouter/`, `bedrock/`) so the agent knows which SDK to use at runtime. OpenAI and Anthropic models are detected by name pattern (no prefix needed). Existing projects continue to work unchanged.
+
+> **Note (OpenAI-Compatible):** RedAmon does not automatically validate chat capability for models returned by your compatible backend. If the backend exposes embedding/audio/image models, select a chat model manually.
 
 #### Provider Setup
 
@@ -501,6 +603,10 @@ RedAmon supports **four AI providers** out of the box, giving you access to **40
 # Direct providers (lowest latency, direct API connection)
 OPENAI_API_KEY=sk-proj-...          # OpenAI — platform.openai.com/api-keys
 ANTHROPIC_API_KEY=sk-ant-...        # Anthropic — console.anthropic.com
+
+# OpenAI-compatible providers (self-hosted or third-party)
+OPENAI_COMPAT_BASE_URL=http://host.docker.internal:11434/v1  # Ollama on same machine (use IP for remote, e.g. http://192.168.1.50:11434/v1)
+OPENAI_COMPAT_API_KEY=                                        # Optional; fallback token "ollama" is used if empty
 
 # Gateway providers (access many models through one key)
 OPENROUTER_API_KEY=sk-or-...        # OpenRouter — openrouter.ai/settings/keys
@@ -515,6 +621,64 @@ AWS_DEFAULT_REGION=us-east-1        # Recommended: us-east-1 (N. Virginia) has t
 
 > **Tip:** You can configure multiple providers simultaneously. The model selector will show all available models from all configured providers, letting you switch between a free Llama model on OpenRouter for testing and Claude Opus on Anthropic for production assessments — without changing any code.
 
+#### OpenAI-Compatible Provider
+
+Any backend that exposes the standard `/v1/chat/completions` and `/v1/models` endpoints works out of the box with RedAmon. Set `OPENAI_COMPAT_BASE_URL` in your `.env` and matching models appear in the project settings dropdown automatically.
+
+The agent container already includes `host.docker.internal` resolution, so local servers running on your host machine are reachable from Docker.
+
+**Ollama on the same machine as RedAmon (local):**
+```env
+OPENAI_COMPAT_BASE_URL=http://host.docker.internal:11434/v1
+```
+
+**Ollama on a different machine (remote server):**
+```env
+OPENAI_COMPAT_BASE_URL=http://192.168.1.50:11434/v1   # replace with your Ollama server's IP or hostname
+```
+Use the IP address (or hostname) of the remote machine instead of `host.docker.internal`. Make sure port `11434` is reachable from the machine running RedAmon (no firewall blocking it).
+
+> **Important:** By default Ollama only listens on `localhost`, which rejects connections from other machines and from Docker containers. You must bind it to all interfaces (`0.0.0.0`) on the machine running Ollama:
+> ```bash
+> # If Ollama is managed by systemd (Linux):
+> sudo mkdir -p /etc/systemd/system/ollama.service.d
+> echo -e '[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0"' | sudo tee /etc/systemd/system/ollama.service.d/override.conf
+> sudo systemctl daemon-reload && sudo systemctl restart ollama
+> ```
+> This is required both for **remote** setups and for **local Linux** setups (Docker containers can't reach `localhost` on the host). macOS and Windows with Docker Desktop handle local resolution automatically, but still need `OLLAMA_HOST=0.0.0.0` if Ollama is accessed from a remote machine.
+
+**Self-hosted / local (free):**
+
+| Provider | Description | Example `OPENAI_COMPAT_BASE_URL` |
+|----------|-------------|----------------------------------|
+| [Ollama](https://ollama.com/) | Easiest way to run local LLMs — single command setup | `http://host.docker.internal:11434/v1` |
+| [vLLM](https://github.com/vllm-project/vllm) | High-performance GPU inference server | `http://host.docker.internal:8000/v1` |
+| [LM Studio](https://lmstudio.ai/) | Desktop app with built-in local server | `http://host.docker.internal:1234/v1` |
+| [LocalAI](https://localai.io/) | Open-source OpenAI drop-in replacement, runs on CPU | `http://host.docker.internal:8080/v1` |
+| [Jan](https://jan.ai/) | Desktop app with ChatGPT-like UI and local server mode | `http://host.docker.internal:1337/v1` |
+| [llama.cpp server](https://github.com/ggerganov/llama.cpp) | Lightweight C++ inference | `http://host.docker.internal:8080/v1` |
+| [OpenLLM](https://github.com/bentoml/OpenLLM) | Run any open-source LLM with one command | `http://host.docker.internal:3000/v1` |
+| [text-generation-webui](https://github.com/oobabooga/text-generation-webui) | Gradio UI with OpenAI-compatible API extension | `http://host.docker.internal:5000/v1` |
+
+**Gateways / proxies (aggregate multiple providers behind one endpoint):**
+
+| Provider | Description |
+|----------|-------------|
+| [LiteLLM](https://github.com/BerriAI/litellm) | Proxy for 100+ LLMs in OpenAI format — self-hostable via Docker |
+
+**Cloud providers with OpenAI-compatible API:**
+
+| Provider | Description |
+|----------|-------------|
+| [Together AI](https://together.ai/) | 200+ open-source models, serverless |
+| [Groq](https://groq.com/) | Ultra-fast inference for Llama, Mixtral, Gemma |
+| [Fireworks AI](https://fireworks.ai/) | Fast open-source model hosting |
+| [Deepinfra](https://deepinfra.com/) | Pay-per-token open-source models |
+| [Mistral AI](https://mistral.ai/) | Mistral / Mixtral models via OpenAI-compatible endpoint |
+| [Perplexity](https://www.perplexity.ai/) | Sonar models via OpenAI-compatible API |
+
+> **Note:** RedAmon fetches all models from your compatible endpoint, including non-chat models (embeddings, audio, image). Make sure to select a **chat-capable** model in project settings.
+
 ---
 
 ### Attack Surface Graph
@@ -523,7 +687,7 @@ The Neo4j graph database is the **single source of truth** for every finding in 
 
 #### Node Types
 
-The graph contains **17 node types** organized into four categories:
+The graph contains **17 recon node types** organized into four categories, plus **5 EvoGraph attack chain node types** (see [EvoGraph](#evograph--attack-chain-evolution) below):
 
 **Infrastructure Nodes** — represent the network topology:
 
@@ -560,7 +724,7 @@ The graph contains **17 node types** organized into four categories:
 | **CVE** | id, cvss, severity (uppercase), description, published | Known vulnerability from NVD |
 | **MitreData** | cve_id, cwe_id, cwe_name, abstraction | CWE weakness mapping |
 | **Capec** | capec_id, name, likelihood, severity, execution_flow | Common attack pattern |
-| **Exploit** | attack_type, target_ip, session_id, cve_ids, metasploit_module | Agent-created successful exploitation record |
+| **ChainFinding** | finding_type, severity, title, evidence, confidence | EvoGraph: agent discovery (replaces legacy Exploit node) — see [EvoGraph](#evograph--attack-chain-evolution) |
 
 #### Relationship Chain
 
@@ -583,25 +747,32 @@ flowchart TB
     MitreData -->|HAS_CAPEC| Capec
     Vulnerability -->|FOUND_AT| Endpoint
     Vulnerability -->|AFFECTS_PARAMETER| Parameter
-    Exploit -->|EXPLOITED_CVE| CVE
-    Exploit -->|TARGETED_IP| IP
-    Exploit --> Vulnerability
 
-    style Domain fill:#1a365d,color:#fff
-    style Subdomain fill:#1a365d,color:#fff
-    style IP fill:#1a365d,color:#fff
-    style Port fill:#1a365d,color:#fff
-    style Service fill:#1a365d,color:#fff
-    style BaseURL fill:#2a4365,color:#fff
-    style Endpoint fill:#2a4365,color:#fff
-    style Parameter fill:#2a4365,color:#fff
-    style Technology fill:#285e61,color:#fff
-    style Header fill:#285e61,color:#fff
-    style CVE fill:#742a2a,color:#fff
-    style Vulnerability fill:#742a2a,color:#fff
-    style MitreData fill:#744210,color:#fff
-    style Capec fill:#744210,color:#fff
-    style Exploit fill:#7b341e,color:#fff
+    AttackChain -->|HAS_STEP| ChainStep
+    ChainStep -->|PRODUCED| ChainFinding
+    AttackChain -.->|CHAIN_TARGETS| IP
+    ChainStep -.->|STEP_TARGETED| IP
+    ChainStep -.->|STEP_EXPLOITED| CVE
+    ChainFinding -.->|FOUND_ON| IP
+    ChainFinding -.->|FINDING_RELATES_CVE| CVE
+
+    style Domain fill:#2d2d2d,color:#fff
+    style Subdomain fill:#2d2d2d,color:#fff
+    style IP fill:#2d2d2d,color:#fff
+    style Port fill:#2d2d2d,color:#fff
+    style Service fill:#2d2d2d,color:#fff
+    style BaseURL fill:#3a3a3a,color:#fff
+    style Endpoint fill:#3a3a3a,color:#fff
+    style Parameter fill:#3a3a3a,color:#fff
+    style Technology fill:#474747,color:#fff
+    style Header fill:#474747,color:#fff
+    style CVE fill:#545454,color:#fff
+    style Vulnerability fill:#545454,color:#fff
+    style MitreData fill:#616161,color:#fff
+    style Capec fill:#616161,color:#fff
+    style AttackChain fill:#6e6e6e,color:#fff
+    style ChainStep fill:#6e6e6e,color:#fff
+    style ChainFinding fill:#6e6e6e,color:#fff
 ```
 
 Vulnerabilities connect differently depending on their source:
@@ -617,352 +788,167 @@ Before the agent takes any offensive action, it queries the graph to build situa
 2. **Technology-CVE correlation** — traverses Technology → CVE relationships to find which detected software versions have known vulnerabilities, prioritizing by CVSS score.
 3. **Injectable parameter discovery** — queries Parameter nodes flagged as `is_injectable: true` by Nuclei to identify confirmed injection points.
 4. **Exploit feasibility assessment** — cross-references open ports, running services, and known CVEs to determine which Metasploit modules are likely to succeed.
-5. **Post-exploitation context** — after a successful exploit, the agent creates an Exploit node linked to the target IP, CVE, and port, so subsequent queries can reference what's already been compromised.
+5. **Post-exploitation context** — after a successful exploit, the agent creates a `ChainFinding(exploit_success)` in the [EvoGraph](#evograph--attack-chain-evolution), bridged to the target IP and CVE in the recon graph, so subsequent sessions can reference what's already been compromised.
 
 All queries are automatically scoped to the current user and project via regex-based tenant filter injection — the agent never generates tenant filters itself, preventing accidental cross-project data access.
 
 ---
 
+### EvoGraph — Attack Chain Evolution
+
+Running parallel to the recon graph, **EvoGraph** (Evolutive Attack Chain Graph) is a persistent, evolutionary graph that tracks everything the AI agent does during exploitation sessions. While the recon graph captures *what exists*, EvoGraph captures *what was tried, what was discovered, what failed, and what decisions were made* — across the entire attack lifecycle.
+
+EvoGraph is not just a logging mechanism — it is the **core intelligence layer** that makes RedAmon's agent fundamentally different from stateless LLM-based tools. By structuring attack chain data as a graph and injecting it into the agent's ReAct prompt in a semantically organized format, EvoGraph transforms raw execution history into actionable operational memory.
+
+#### Structured Chain Context in the ReAct Prompt
+
+Traditional agentic systems feed the LLM a flat, chronological list of every tool call and output — a noisy, token-heavy format where critical intelligence (a discovered credential, a confirmed CVE, a lesson from a failed exploit) is buried among dozens of identical-looking step entries. **EvoGraph replaces this with a structured, semantically partitioned context** injected directly into the ReAct reasoning loop:
+
+| Section | What the LLM Sees | Why It Matters |
+|---------|-------------------|----------------|
+| **Findings** | All discoveries sorted by severity — critical first (credentials, exploit successes, confirmed vulnerabilities) | The agent immediately knows what has been achieved and can build on it |
+| **Failed Attempts** | Each failure with the specific lesson learned ("rockyou-top1000 insufficient for SSH", "port 80 filtered, use 443") | The agent avoids repeating mistakes — no wasted cycles on known dead ends |
+| **Decisions** | Phase transitions and strategy changes with rationale | The agent understands the strategic arc of the session |
+| **Recent Steps** | Only the last 5 tool executions in compact form | Maintains immediate tactical awareness without flooding the context |
+
+This structured injection **improves agent efficiency by over 25%** compared to flat execution traces. The improvement comes from two compounding effects: the LLM spends fewer reasoning tokens parsing irrelevant context (less noise → faster convergence), and it makes better tactical decisions because critical intelligence is surfaced at the top of its context window rather than buried hundreds of lines deep. The agent finds the right exploit path faster, avoids redundant work, and produces more focused tool calls — fewer wasted iterations, more actionable steps per session.
+
+#### Five Node Types
+
+| Node | Purpose |
+|------|---------|
+| **AttackChain** | Root of an attack chain — maps 1:1 to a chat session (objective, target, status, outcome) |
+| **ChainStep** | Each tool execution — tool name, arguments, output analysis, success/failure |
+| **ChainFinding** | Intelligence discovered during a step — vulnerabilities confirmed, credentials found, exploit successes |
+| **ChainDecision** | Strategic decision points — phase transitions, strategy changes, user approvals/rejections |
+| **ChainFailure** | Structured record of what was tried and why it failed, with lessons learned |
+
+#### Bridge Relationships
+
+EvoGraph nodes connect back to the recon graph through typed bridge relationships:
+
+- **CHAIN_TARGETS** — links an AttackChain to its target IP, Subdomain, Port, or CVE in the recon graph
+- **STEP_TARGETED / STEP_EXPLOITED** — links individual steps to the infrastructure they acted on or the CVE they exploited
+- **FOUND_ON / FINDING_RELATES_CVE** — links findings to where they were discovered and which CVEs they relate to
+
+This unification means a single Neo4j query can traverse from a recon graph node (e.g., an IP address) through all attack chains that targeted it, every finding discovered, and every failure encountered.
+
+#### Persistent Cross-Session Memory
+
+Every attack chain — with all its steps, findings, decisions, and failures — is **permanently persisted in Neo4j**. This is not ephemeral session state: it is a growing, cumulative knowledge base for the entire project. When a new session starts, the agent automatically loads summaries of all prior chains — high-severity findings, failure lessons, successful exploits, strategic outcomes — and injects them into its initial system prompt.
+
+This means the agent **never starts from zero**. Session B knows that Session A already tried SSH brute force with a small wordlist and failed, that port 80 is filtered, and that a credential was found on the FTP service. It builds on this accumulated intelligence, skipping known dead ends and leveraging prior discoveries. Over multiple sessions, EvoGraph transforms the agent from a stateless tool executor into a **knowledge-accumulating offensive system** where every session makes the next one smarter.
+
+#### Dual Memory Architecture
+
+EvoGraph uses a dual-recording pattern — every event is written to both **in-memory lists** (for instant LLM context via `format_chain_context()`) and **Neo4j** (for persistent cross-session queries via `query_prior_chains()`). The in-memory working memory never depends on graph availability, ensuring zero-latency agent reasoning.
+
+> **Deep dive:** See the [Agentic System Documentation](agentic/readmes/README.PENTEST_AGENT.md#evograph--evolutive-attack-chain-graph) for full node taxonomy, relationship diagrams, dual memory architecture, orchestrator integration, and the complete comparison of the old flat execution trace vs. the new semantic chain context.
+
+---
+
+### Multi-Session Parallel Attack Chains
+
+RedAmon supports launching **multiple concurrent agent sessions** against the same project. Each session creates its own independent **AttackChain** in the EvoGraph, and all chains persist permanently in Neo4j alongside the full conversation history in PostgreSQL.
+
+This means you can:
+
+- **Run parallel attack strategies** — launch one session targeting SSH brute force while another explores web application CVEs, each operating independently with its own chain of steps, findings, and decisions.
+- **Resume any session** — every session appears in the AI drawer's session list. Selecting a session restores its full conversation and chain context, so you can pick up exactly where you left off.
+- **Accumulate cross-session intelligence** — when a new session starts, the agent automatically loads findings and failure lessons from *all* prior sessions for the project. Session B knows what Session A already tried, what worked, and what failed — avoiding redundant work and building on prior discoveries.
+- **Track everything persistently** — all attack chains, tool executions, findings, and decisions are stored permanently in Neo4j. Nothing is lost when you close the browser or restart the containers. The full attack history is always available for querying and visualization on the graph dashboard.
+
+Each session's attack chain is visually represented on the [graph dashboard](#attack-surface-graph) with distinct coloring — inactive chains render in grey, the active session's chain pulses in orange, and per-session visibility can be toggled from the bottom bar controls.
+
+---
+
+### Remote Shells — Live Session Interaction
+
+The **Remote Shells** tab provides a unified view of every active session established by the AI agent — meterpreter shells, raw reverse/bind shells, and background listeners. Sessions appear automatically within seconds of being opened, and each one can be interacted with directly from the browser through a built-in terminal.
+
+A **Command Whisperer** input sits above the terminal: describe what you want in plain English (e.g., *"list all files containing passwords"*) and the project's LLM translates it into the correct command for the current shell type, auto-filling the terminal for review before execution.
+
+---
+
+### CypherFix — Automated Vulnerability Remediation
+
+CypherFix closes the loop between **finding vulnerabilities** and **fixing them**. After reconnaissance, exploitation, and pentesting populate the attack surface graph with hundreds of findings, CypherFix takes over — triaging, prioritizing, and generating code fixes automatically.
+
+The pipeline consists of two AI agents:
+
+#### Triage Agent — Analyze & Prioritize
+
+The triage agent uses a **hybrid architecture**: it first runs 9 hardcoded Cypher queries against the Neo4j graph to deterministically collect all vulnerability data (DAST findings, CVE chains, secrets, exploits, attack chain results, certificates, security checks), then hands the raw data to an LLM for correlation, deduplication, and prioritization.
+
+The LLM applies a weighted scoring algorithm where attack chain exploit successes (1200 pts), confirmed exploits (1000 pts), and CISA KEV entries (800 pts) rank highest — ensuring that proven, exploitable vulnerabilities are fixed first. The output is a prioritized list of **remediation entries** saved to the database, each with severity, CVE/CWE/CAPEC references, affected assets, evidence, and an AI-suggested solution.
+
+During the analysis phase, the LLM can optionally call tools to enrich its understanding:
+- **`query_graph`** — run follow-up Cypher queries for additional context
+- **`web_search`** — check CISA KEV catalog, exploit databases, or CVE details
+
+#### CodeFix Agent — Fix & Ship
+
+The CodeFix agent takes a single remediation entry and autonomously implements the fix. It replicates **Claude Code's exact agentic design** — a pure ReAct while-loop where the LLM is the sole controller:
+
+1. **Clone** the target repository and create a fix branch (`cypherfix/{remediation_id}`)
+2. **Explore** the codebase using 11 tools: `github_read`, `github_grep`, `github_glob`, `github_symbols`, `github_find_definition`, `github_find_references`, `github_repo_map`, `github_edit`, `github_write`, `github_bash`, `github_list_dir`
+3. **Implement** the fix — the LLM reads files, searches for patterns, navigates the AST, and makes targeted edits. Each edit generates a **diff block** streamed to the frontend for user review (accept/reject)
+4. **Verify** — the agent can run tests, linters, and builds using the full runtime environment (Node.js, Python, Go, Java, Ruby, PHP, .NET, build tools)
+5. **Ship** — commit all accepted changes, push to GitHub, and open a pull request
+
+```mermaid
+flowchart LR
+    subgraph Triage["Triage Agent"]
+        NEO4J[(Neo4j\nAttack Surface)] --> COLLECT[9 Cypher\nQueries]
+        COLLECT --> LLM_T[LLM Analysis\nCorrelate + Prioritize]
+        LLM_T --> REMS[Remediation\nEntries]
+    end
+
+    subgraph CodeFix["CodeFix Agent"]
+        REMS --> CLONE[Clone Repo\nCreate Branch]
+        CLONE --> REACT[ReAct Loop\n11 Code Tools]
+        REACT --> DIFF[Diff Blocks\nUser Review]
+        DIFF --> PR[Commit + Push\nGitHub PR]
+    end
+```
+
+#### Key Design Decisions
+
+- **Deterministic collection + LLM analysis** — the triage agent always collects the same data (reproducible); only the analysis varies
+- **No hardcoded state machine** — the CodeFix agent's LLM decides tool order, retries, and when to stop
+- **User approval gate** — every code edit can require user acceptance before the agent continues
+- **Re-run safe** — branches use full remediation IDs; PRs are updated (not duplicated) on re-runs
+- **Multi-provider LLM** — both agents support OpenAI, Anthropic, Bedrock, OpenRouter, and custom OpenAI-compatible endpoints
+
+> **Deep dive:** See the [CypherFix Agents Documentation](agentic/readmes/README.CYPHERFIX_AGENTS.md) for complete architecture diagrams, WebSocket protocols, tool specifications, state models, and configuration reference.
+
+---
+
 ### Project Settings
 
-Every project in RedAmon has **180+ configurable parameters** that control the behavior of each reconnaissance module and the AI agent. These settings are managed through the webapp's project form UI, stored in PostgreSQL via Prisma ORM, and fetched by the recon container and agent at runtime.
+Every project in RedAmon has **180+ configurable parameters** across 11 setting categories that control the behavior of each reconnaissance module and the AI agent. These settings are managed through the webapp's project form UI, stored in PostgreSQL via Prisma ORM, and fetched by the recon container and agent at runtime.
 
 <p align="center">
-  <img src="assets/new_project.gif" alt="RedAmon Project Settings" width="100%"/>
+  <img src="assets/settings.gif" alt="RedAmon Project Settings" width="100%"/>
 </p>
 
-#### Target Configuration
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Target Domain | — | The root domain to assess |
-| Subdomain List | [] | Specific subdomain prefixes to scan (empty = discover all) |
-| Verify Domain Ownership | false | Require DNS TXT record proof before scanning |
-| Use Tor | false | Route all recon traffic through the Tor network |
-| Use Bruteforce | true | Enable Knockpy active subdomain bruteforcing |
-
-#### Scan Module Toggles
-
-Modules can be individually enabled/disabled with automatic dependency resolution — disabling a parent module automatically disables all children:
-
-```
-domain_discovery (root)
-  └── port_scan
-       └── http_probe
-            ├── resource_enum
-            └── vuln_scan
-```
-
-#### Port Scanner (Naabu)
-
-Controls how ports are discovered on target hosts. Key settings include scan type (SYN vs. CONNECT), top-N port selection or custom port ranges, rate limiting, thread count, CDN exclusion, passive mode via Shodan InternetDB, and host discovery skip.
-
-#### HTTP Prober (httpx)
-
-Controls what metadata is extracted from live HTTP services. Over 25 toggles for individual probe types: status codes, content analysis, technology detection, TLS/certificate inspection, favicon hashing, JARM fingerprinting, ASN/CDN detection, response body inclusion, and custom header injection. Also configures redirect following depth and rate limiting.
-
-#### Technology Detection (Wappalyzer)
-
-Controls the second-pass technology fingerprinting engine. Settings include enable/disable toggle, minimum confidence threshold (0-100%), HTML requirement filter, auto-update from npm, and cache TTL.
-
-#### Banner Grabbing
-
-Controls raw socket banner extraction for non-HTTP ports (SSH, FTP, SMTP, MySQL, Redis). Settings include enable/disable toggle, connection timeout, thread count, and maximum banner length.
-
-#### Web Crawler (Katana)
-
-Active web crawling using Katana from ProjectDiscovery. Discovers URLs, endpoints, and parameters by following links and parsing JavaScript. Found URLs with parameters feed into Nuclei DAST mode for vulnerability fuzzing.
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Enable Katana | true | Master toggle for active web crawling |
-| Crawl Depth | 2 | How many links deep to follow (1-10). Each level adds ~50% time |
-| Max URLs | 300 | Maximum URLs to collect per domain. 300: ~1-2 min/domain, 1000+: scales linearly |
-| Rate Limit | 50 | Requests per second to avoid overloading target |
-| Timeout | 3600 | Overall crawl timeout in seconds (default: 60 minutes) |
-| JavaScript Crawling | false | Parse JS files to find hidden endpoints and API calls. Uses headless browser (+50-100% time) |
-| Parameters Only | false | Only keep URLs with query parameters (?key=value) for DAST fuzzing |
-| Exclude Patterns | [...] | URL patterns to skip — static assets, images, CDN URLs. 100+ default patterns pre-configured |
-| Custom Headers | [] | Browser-like request headers to avoid detection during DAST crawling (e.g., User-Agent) |
-| Docker Image | (locked) | Katana Docker image used for crawling (system-managed) |
-
-#### Passive URL Discovery (GAU)
-
-Passive URL discovery using GetAllUrls (GAU). Retrieves historical URLs from web archives and threat intelligence sources without touching the target directly. Complements Katana's active crawling with archived data (~20-60 sec per domain).
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Enable GAU | false | Master toggle for passive URL discovery |
-| Providers | wayback, commoncrawl, otx, urlscan | Data sources to query for archived URLs |
-| Max URLs | 1000 | Maximum URLs to fetch per domain (0 = unlimited) |
-| Timeout | 60 | Request timeout per provider (seconds) |
-| Threads | 5 | Parallel fetch threads (1-20) |
-| Year Range | [] | Filter Wayback Machine by year (e.g., "2020, 2024"). Empty = all years |
-| Verbose Output | false | Enable detailed logging for debugging |
-| Blacklist Extensions | [...] | File extensions to exclude (e.g., png, jpg, css, pdf, zip) |
-
-**URL Verification** — when enabled, GAU verifies each discovered URL is still live using httpx, filtering out dead links. This doubles or triples GAU time but eliminates false leads:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Verify URLs | false | HTTP check to confirm archived URLs still exist |
-| Verify Timeout | 5 | Seconds per URL check |
-| Verify Rate Limit | 100 | Verification requests per second |
-| Verify Threads | 50 | Concurrent verification threads (1-100) |
-| Accept Status Codes | [200, 201, 301, ...] | Status codes that indicate a live URL. Include 401/403 for auth-protected endpoints |
-| Filter Dead Endpoints | true | Exclude URLs returning 404/500/timeout from final results |
-
-**HTTP Method Detection** — when URL verification is enabled, GAU can additionally discover allowed HTTP methods (GET, POST, PUT, DELETE) via OPTIONS probes (+30-50% time on top of verification):
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Detect Methods | false | Send OPTIONS request to discover allowed methods |
-| Method Detect Timeout | 5 | Seconds per OPTIONS request |
-| Method Detect Rate Limit | 50 | Requests per second |
-| Method Detect Threads | 25 | Concurrent threads |
-
-#### API Discovery (Kiterunner)
-
-API endpoint bruteforcing using Kiterunner from Assetnote. Discovers hidden REST API routes by testing against comprehensive wordlists derived from real-world Swagger/OpenAPI specifications (~5-30 min per endpoint).
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Enable Kiterunner | true | Master toggle for API route bruteforcing |
-| Wordlist | routes-large | API route wordlist: `routes-large` (~100k routes, 10-30 min) or `routes-small` (~20k routes, 5-10 min) |
-| Rate Limit | 100 | Requests per second. Lower is stealthier |
-| Connections | 100 | Concurrent connections per target |
-| Timeout | 10 | Per-request timeout (seconds) |
-| Scan Timeout | 1000 | Overall scan timeout (seconds). Large wordlists need more time |
-| Threads | 50 | Parallel scanning threads |
-| Min Content Length | 0 | Ignore responses smaller than this (bytes). Filters empty or trivial responses |
-
-**Status Code Filters** — control which HTTP responses are kept:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Ignore Status Codes | [] | Blacklist: filter out noise from common errors (e.g., 404, 500) |
-| Match Status Codes | [200, 201, ...] | Whitelist: only show endpoints with these codes. Includes auth-protected (401, 403) |
-| Custom Headers | [] | Request headers for authenticated API scanning (e.g., Authorization: Bearer token) |
-
-**Method Detection** — Kiterunner wordlists only contain GET routes. This feature discovers POST/PUT/DELETE methods on found endpoints (+30-50% scan time):
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Detect Methods | true | Find additional HTTP methods beyond GET |
-| Detection Mode | bruteforce | `bruteforce` — try each method (slower, more accurate) or `options` — parse Allow header (faster) |
-| Bruteforce Methods | POST, PUT, DELETE, PATCH | Methods to try in bruteforce mode |
-| Method Detect Timeout | 5 | Seconds per request |
-| Method Detect Rate Limit | 50 | Requests per second |
-| Method Detect Threads | 25 | Concurrent threads |
-
-#### Vulnerability Scanner (Nuclei)
-
-Template-based vulnerability scanning using ProjectDiscovery's Nuclei. Runs thousands of security checks against discovered endpoints to identify CVEs, misconfigurations, exposed panels, and other security issues.
-
-**Performance Settings:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Severity Levels | critical, high, medium, low, info | Filter vulnerabilities by severity. Excluding "info" is ~70% faster |
-| Rate Limit | 100 | Requests per second. 100-150 for most targets, lower for sensitive systems |
-| Bulk Size | 25 | Number of hosts to process in parallel |
-| Concurrency | 25 | Templates to execute in parallel |
-| Timeout | 10 | Request timeout per template check (seconds) |
-| Retries | 1 | Retry attempts for failed requests (0-10) |
-| Max Redirects | 10 | Maximum redirect chain to follow (0-50) |
-
-**Template Configuration:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Template Folders | [] | Template directories to include: cves, vulnerabilities, misconfiguration, exposures, technologies, default-logins, takeovers. Empty = all |
-| Exclude Template Paths | [] | Exclude specific directories or template files by path (e.g., http/vulnerabilities/generic/) |
-| Custom Template Paths | [] | Add your own templates in addition to the official repository |
-| Include Tags | [] | Filter by functionality tags: cve, xss, sqli, rce, lfi, ssrf, xxe, ssti. Empty = all |
-| Exclude Tags | [] | Exclude tags — recommended: dos, fuzz for production |
-
-**Template Options:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Auto Update Templates | true | Download latest templates before scan. Adds ~10-30 seconds |
-| New Templates Only | false | Only run templates added since last update. Good for daily scans |
-| DAST Mode | true | Active fuzzing for XSS, SQLi, RCE. More aggressive, requires URLs with parameters (+50-100% time) |
-
-**Advanced Options:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Headless Mode | false | Use headless browser for JavaScript-rendered pages (+100-200% time) |
-| System DNS Resolvers | false | Use OS DNS instead of Nuclei defaults. Better for internal networks |
-| Interactsh | true | Detect blind vulnerabilities (SSRF, XXE, RCE) via out-of-band callback servers. Requires internet |
-| Follow Redirects | true | Follow HTTP redirects during template execution |
-| Scan All IPs | false | Scan all resolved IPs, not just hostnames. May find duplicate vulnerabilities |
-
-#### CVE Enrichment
-
-Enrich vulnerability findings with detailed CVE data from NVD and other sources. Provides CVSS scores, affected versions, exploitation status, and remediation guidance (~1-5 min depending on technologies found).
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Enable CVE Lookup | true | Master toggle for CVE enrichment |
-| CVE Source | nvd | Data source: `nvd` (National Vulnerability Database) or `vulners` |
-| Max CVEs per Finding | 20 | Maximum CVE entries to retrieve per technology/vulnerability (1-100) |
-| Min CVSS Score | 0 | Only include CVEs at or above this CVSS score (0-10, step 0.1) |
-| NVD API Key | — | Free key from nist.gov — without key: rate-limited (10 req/min), with key: ~80x faster |
-| Vulners API Key | — | API key for Vulners data source |
-
-#### MITRE Mapping
-
-Controls CWE/CAPEC enrichment of CVE findings. Settings include auto-update toggle, CWE/CAPEC inclusion toggles, and cache TTL.
-
-#### Security Checks
-
-25+ individual toggle-controlled checks grouped into six categories:
-
-- **Network Exposure** — direct IP access (HTTP/HTTPS), IP-based API exposure, WAF bypass detection.
-- **TLS/Certificate** — certificate expiry warning (configurable days threshold).
-- **Security Headers** — missing Referrer-Policy, Permissions-Policy, COOP, CORP, COEP, Cache-Control, CSP unsafe-inline.
-- **Authentication** — login forms over HTTP, session cookies without Secure/HttpOnly flags, Basic Auth without TLS.
-- **DNS Security** — missing SPF, DMARC, DNSSEC records, zone transfer enabled.
-- **Exposed Services** — admin ports, databases, Redis without auth, Kubernetes API, SMTP open relay.
-- **Application** — insecure form actions, missing rate limiting.
-
-#### GVM Vulnerability Scan
-
-Configure GVM/OpenVAS network-level vulnerability scanning. These settings control scan depth, target strategy, and timeouts for the Greenbone vulnerability scanner. Requires the GVM stack to be running (starts automatically with `docker compose up -d`).
-
-**Scan Configuration:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Scan Profile | Full and fast | GVM scan configuration preset — see [Scan Profiles & Time Estimates](#scan-profiles--time-estimates) for the full comparison of all 7 profiles |
-| Scan Targets Strategy | both | Which targets from recon data to scan: `both` (IPs and hostnames), `ips_only`, or `hostnames_only`. "Both" doubles the target count |
-
-**Timeouts & Polling:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Task Timeout | 14400 | Maximum seconds to wait for a single scan task. 0 = unlimited. Default: 4 hours |
-| Poll Interval | 5 | Seconds between scan status checks (5-300). Lower values give faster log updates |
-
-**Post-Scan:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Cleanup After Scan | true | Remove scan targets and tasks from GVM's internal database after results are extracted. Keeps GVM clean across multiple scans. Results are always saved to JSON and Neo4j regardless |
-
-#### GitHub Secret Hunting
-
-Search GitHub repositories for exposed secrets, API keys, and credentials related to your target domain. GitHub Secret Hunting runs as an **independent module** (separate from the recon pipeline), triggered from the Graph page toolbar after reconnaissance completes — exactly like the GVM vulnerability scanner.
-
-The scanner uses **40+ regex patterns** and **Shannon entropy analysis** to detect leaked credentials including AWS keys, Google Cloud credentials, database connection strings, JWT tokens, private RSA/SSH keys, Slack/Discord/Stripe tokens, and many more. Results are stored in the Neo4j graph and can be downloaded as JSON.
-
-> **Important:** The GitHub token is used **exclusively for read-only scanning**. It accesses the GitHub API to list repositories and read file contents — it never creates, modifies, or deletes anything on GitHub.
-
-**How to Create a GitHub Personal Access Token:**
-
-1. Go to **GitHub.com** → click your profile picture (top-right) → **Settings**
-2. In the left sidebar, scroll to the bottom and click **Developer settings**
-3. Click **Personal access tokens** → **Tokens (classic)**
-4. Click **Generate new token** → **Generate new token (classic)**
-5. Give it a descriptive name (e.g., `redamon-secret-scan`)
-6. Set an expiration (recommended: 30 or 90 days)
-7. Select the following scopes:
-   - **`repo`** — Full control of private repositories. Required to read repository contents and search through code. This is the minimum required scope.
-   - **`read:org`** — Read organization membership. Required to list organization repositories and discover member accounts when "Scan Member Repositories" is enabled.
-   - **`gist`** — Access gists. Required only if you enable "Scan Gists" to search for secrets in public and private gists.
-8. Click **Generate token** and copy the token immediately (it starts with `ghp_`). You won't be able to see it again.
-9. Paste the token into the **GitHub Access Token** field in your project settings.
-
-**Parameters:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| GitHub Access Token | — | The Personal Access Token (PAT) that authenticates API requests to GitHub. Without this token, no scanning can occur — all other options remain disabled until a valid token is provided. The token format is `ghp_xxxxxxxxxxxx`. See the step-by-step guide above for creating one with the correct scopes |
-| Target Organization | — | The GitHub **organization name** or **username** to scan. This is the account whose repositories will be searched for leaked secrets. For example, if your target domain is `example.com` and their GitHub organization is `example-inc`, enter `example-inc` here. You can also enter a personal GitHub username to scan that user's public repositories. The scanner will enumerate all accessible repositories under this account and search their contents for secret patterns |
-| Target Repositories | — | Comma-separated list of **repository names** to scan (e.g., `repo1, repo2, repo3`). When specified, only the listed repositories are scanned instead of all repositories under the target organization/user. Matching is **case-insensitive** and uses the repository name only (not `owner/repo`). Leave empty to scan **all** accessible repositories — which is the default behavior |
-| Scan Member Repositories | false | When enabled, the scanner also discovers and scans repositories belonging to **individual members** of the target organization — not just the organization's own repos. This is useful because developers often store work-related code (including secrets) in their personal accounts. Requires the `read:org` scope on your token. Significantly increases scan scope and time |
-| Scan Gists | false | When enabled, the scanner searches **GitHub Gists** (code snippets) created by the organization and its members. Developers frequently paste configuration files, API keys, and connection strings into gists without realizing they're public. Requires the `gist` scope on your token |
-| Scan Commits | false | When enabled, the scanner examines **commit history** — not just the current state of files, but also previous versions. This catches secrets that were committed and later removed (but remain in git history). **This is the most expensive operation** — disabling it saves 50%+ of total scan time. Each commit requires a separate API call to retrieve and analyze the diff |
-| Max Commits to Scan | 100 | The maximum number of commits to examine **per repository**. Only visible when "Scan Commits" is enabled. Scan time scales linearly with this value: 100 commits (default) provides a reasonable balance between coverage and speed; 500 covers more history at ~5x the time; 1000 is thorough but ~10x slower. Valid range: 1–1000 |
-| Output as JSON | false | When enabled, saves the complete scan results as a structured JSON file (`github_hunt_{project_id}.json`) that can be downloaded from the Graph page. The JSON includes every detected secret with its file path, line number, matched pattern, repository name, and entropy score |
-
-#### Agent Behavior
-
-Configure the AI agent orchestrator that performs autonomous pentesting. Controls LLM model, phase transitions, payload settings, tool access, and safety gates.
-
-**LLM & Phase Configuration:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| LLM Model | claude-opus-4-6 | The language model powering the agent. Supports four providers: **OpenAI** (GPT-5.2, GPT-5, GPT-4.1), **Anthropic** (Claude Opus 4.6, Sonnet 4.5, Haiku 4.5), **OpenRouter** (300+ models — Llama, Gemini, Mistral, etc.), and **AWS Bedrock** (Claude, Titan, Llama, etc.). Models are **dynamically fetched** from each provider whose API key is configured — the dropdown updates automatically. Each provider requires its own API key in `.env` |
-| Post-Exploitation Type | statefull | `statefull` — keeps Meterpreter sessions between turns. `stateless` — executes one-shot commands |
-| Activate Post-Exploitation Phase | true | Whether post-exploitation is available at all. When disabled, the agent stops after exploitation |
-| Informational Phase System Prompt | — | Custom instructions injected during the informational/recon phase. Leave empty for default |
-| Exploitation Phase System Prompt | — | Custom instructions injected during the exploitation phase. Leave empty for default |
-| Post-Exploitation Phase System Prompt | — | Custom instructions injected during the post-exploitation phase. Leave empty for default |
-
-**Payload Direction:**
-
-Controls how reverse/bind shell payloads connect. **Reverse**: target connects back to you (LHOST + LPORT). **Bind**: you connect to the target (leave LPORT empty).
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| LHOST (Attacker IP) | — | Your IP address for reverse shell callbacks. Leave empty for bind mode |
-| LPORT | — | Your listening port for reverse shells. Leave empty for bind mode |
-| Bind Port on Target | — | Port the target opens when using bind shell payloads. Leave empty if unsure (agent will ask) |
-| Payload Use HTTPS | false | Use `reverse_https` instead of `reverse_tcp` for reverse payloads |
-
-**Agent Limits:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Max Iterations | 100 | Maximum LLM reasoning-action loops per objective |
-| Trace Memory Steps | 100 | Number of past steps kept in the agent's working context |
-| Tool Output Max Chars | 20000 | Truncation limit for tool output passed to the LLM (min: 1000) |
-
-**Approval Gates:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Require Approval for Exploitation | true | User confirmation before transitioning to exploitation phase |
-| Require Approval for Post-Exploitation | true | User confirmation before transitioning to post-exploitation phase |
-
-**Brute Force Credential Guess:**
-
-Configure brute force credential guessing attack parameters including speed throttling and retry limits.
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Bruteforce Speed | 5 | Delay between login attempts. `5` — No delay (Fastest), `4` — 0.1s (Aggressive), `3` — 0.5s (Normal), `2` — 1s (Polite), `1` — 15s (Sneaky), `0` — 5 min (Glacial/Stealth). Lower values reduce detection risk but take longer |
-| Brute Force Max Wordlist Attempts | 3 | Wordlist combinations to try before giving up (1-10) |
-
-**Retries, Logging & Debug:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Cypher Max Retries | 3 | Neo4j query retry attempts on failure (0-10) |
-| Log Max MB | 10 | Maximum log file size before rotation |
-| Log Backups | 5 | Number of rotated log backups to keep |
-| Create Graph Image on Init | false | Generate a LangGraph visualization when the agent starts. Useful for debugging |
-
-**Tool Phase Restrictions:**
-
-A matrix that controls which tools the agent can use in each operational phase. Each tool can be enabled/disabled independently per phase:
-
-| Tool | Informational | Exploitation | Post-Exploitation |
-|------|:---:|:---:|:---:|
-| query_graph | ✓ | ✓ | ✓ |
-| web_search | ✓ | ✓ | ✓ |
-| execute_curl | ✓ | ✓ | ✓ |
-| execute_naabu | ✓ | ✓ | ✓ |
-| execute_nmap | ✓ | ✓ | ✓ |
-| execute_nuclei | ✓ | ✓ | ✓ |
-| kali_shell | ✓ | ✓ | ✓ |
-| execute_code | — | ✓ | ✓ |
-| metasploit_console | — | ✓ | ✓ |
-| msf_restart | — | ✓ | ✓ |
+| Category | Key Settings |
+|----------|-------------|
+| **Target & Modules** | Target domain or IP/CIDR targets, subdomain list, IP mode toggle, stealth mode, scan module toggles, Tor routing |
+| **Port Scanning** | Naabu scan type, top-N ports, rate limiting, CDN exclusion, passive mode |
+| **HTTP Probing** | httpx 25+ probe toggles, TLS inspection, redirect following |
+| **Resource Enumeration** | Katana depth/max URLs, GAU passive discovery, Kiterunner API brute-forcing |
+| **Vulnerability Scanning** | Nuclei severity filters, DAST mode, template management, Interactsh |
+| **CVE & MITRE** | CVE enrichment from NVD/Vulners, CWE/CAPEC mapping |
+| **Security Checks** | 25+ individual checks: headers, TLS, DNS, exposed services |
+| **GVM Scan** | Scan profiles, target strategy, timeouts |
+| **Integrations** | GitHub secret hunting with 40+ regex patterns |
+| **Agent Behaviour** | LLM model (400+), phases, payloads, tunnel provider (ngrok/chisel), approval gates, limits |
+| **Attack Paths** | Hydra brute force, phishing SMTP configuration, tool phase restriction matrix |
+
+> **Full parameter reference:** See the **[Project Settings Reference](https://github.com/samugit83/redamon/wiki/9.-Project-Settings-Reference)** in the Wiki for all 180+ parameters with defaults and descriptions.
+>
+> **Complete user guide:** See the **[RedAmon Wiki](https://github.com/samugit83/redamon/wiki)** for step-by-step instructions on creating users, projects, running scans, and using the AI agent.
 
 ---
 
@@ -1004,6 +990,18 @@ flowchart TB
         Postgres[(PostgreSQL<br/>Project Settings<br/>:5432)]
     end
 
+    subgraph LLMProviders["🧠 LLM Providers"]
+        OpenAI[OpenAI]
+        Anthropic[Anthropic]
+        LocalLLM[Local Models<br/>Ollama · vLLM · LM Studio]
+        OpenRouter[OpenRouter<br/>300+ Models]
+        Bedrock[AWS Bedrock]
+    end
+
+    subgraph External["🌐 External APIs"]
+        GitHubAPI[GitHub API<br/>Repos & Code Search]
+    end
+
     subgraph Targets["🎯 Target Layer"]
         Target[Target Systems]
         GuineaPigs[Guinea Pigs<br/>Test VMs]
@@ -1019,7 +1017,12 @@ flowchart TB
     ReconOrch -->|Docker SDK| GVM
     ReconOrch -->|Docker SDK| GHHunt
     Recon -->|Fetch Settings| Webapp
-    GHHunt -->|GitHub API| GHHunt
+    GHHunt -->|GitHub API| GitHubAPI
+    Agent -->|API| OpenAI
+    Agent -->|API| Anthropic
+    Agent -->|API| LocalLLM
+    Agent -->|API| OpenRouter
+    Agent -->|API| Bedrock
     Agent --> Neo4j
     Agent -->|MCP Protocol| NetworkRecon
     Agent -->|MCP Protocol| Nuclei
@@ -1122,7 +1125,7 @@ flowchart TB
             subgraph AgenticContainer["agentic-container"]
                 FastAPI[FastAPI :8090]
                 LangGraph[LangGraph Engine]
-                Claude[Claude AI]
+                LLMProvider[LLM Provider<br/>OpenAI · Anthropic · Local · OpenRouter · Bedrock]
             end
 
             subgraph Neo4jContainer["neo4j-container"]
@@ -1181,6 +1184,23 @@ flowchart TB
         ReconContainer -->|Fetch Settings| WebappContainer
     end
 ```
+
+### Exposed Services & Ports
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Webapp** | http://localhost:3000 | Main UI — create projects, configure targets, launch scans |
+| PostgreSQL | localhost:5432 | Primary database (Prisma) |
+| Neo4j Browser | http://localhost:7474 | Graph database UI for attack surface visualization |
+| Neo4j Bolt | localhost:7687 | Neo4j driver protocol (used by agent) |
+| Recon Orchestrator | http://localhost:8010 | Manages recon pipeline containers |
+| Agent API | http://localhost:8090 | AI agent WebSocket + REST API |
+| MCP Network Recon | http://localhost:8000 | curl + naabu (HTTP probing, port scanning) |
+| MCP Nuclei | http://localhost:8002 | Nuclei vulnerability scanner |
+| MCP Metasploit | http://localhost:8003 | Metasploit Framework RPC |
+| MCP Nmap | http://localhost:8004 | Nmap network scanner |
+| Metasploit Progress | http://localhost:8013 | Live progress streaming for long-running exploits |
+| Metasploit Listener | localhost:4444 | Reverse shell listener (Meterpreter) |
 
 ### Recon Pipeline Detail
 
@@ -1277,7 +1297,7 @@ sequenceDiagram
     User->>Main: python main.py
     Main->>Main: Load project settings (API or defaults)
 
-    rect rgb(40, 40, 80)
+    rect rgb(35, 35, 35)
         Note over DD: Phase 1: Domain Discovery
         Main->>DD: discover_subdomains(domain)
         DD->>DD: WHOIS lookup
@@ -1288,7 +1308,7 @@ sequenceDiagram
         DD-->>Main: subdomains + IPs
     end
 
-    rect rgb(40, 80, 40)
+    rect rgb(45, 45, 45)
         Note over PS: Phase 2: Port Scanning
         Main->>PS: run_port_scan(targets)
         PS->>PS: Naabu SYN scan
@@ -1297,7 +1317,7 @@ sequenceDiagram
         PS-->>Main: open ports + services
     end
 
-    rect rgb(80, 40, 40)
+    rect rgb(55, 55, 55)
         Note over HP: Phase 3: HTTP Probing
         Main->>HP: run_http_probe(targets)
         HP->>HP: HTTP/HTTPS requests
@@ -1307,7 +1327,7 @@ sequenceDiagram
         HP-->>Main: live URLs + tech stack
     end
 
-    rect rgb(80, 80, 40)
+    rect rgb(40, 40, 40)
         Note over RE: Phase 4: Resource Enumeration
         Main->>RE: run_resource_enum(urls)
         RE->>RE: Katana crawl
@@ -1316,7 +1336,7 @@ sequenceDiagram
         RE-->>Main: endpoints + parameters
     end
 
-    rect rgb(80, 40, 80)
+    rect rgb(50, 50, 50)
         Note over VS: Phase 5: Vulnerability Scan
         Main->>VS: run_vuln_scan(targets)
         VS->>VS: Nuclei templates
@@ -1329,7 +1349,7 @@ sequenceDiagram
     Main->>Neo4j: Update graph database
     Neo4j-->>User: Graph ready for visualization
 
-    rect rgb(40, 80, 80)
+    rect rgb(60, 60, 60)
         Note over GVM: Phase 6 (Optional): Network Vuln Scan
         User->>GVM: Trigger GVM scan from UI
         GVM->>JSON: Read recon output (IPs + hostnames)
@@ -1340,7 +1360,7 @@ sequenceDiagram
         Neo4j-->>User: Network vulns added to graph
     end
 
-    rect rgb(80, 60, 80)
+    rect rgb(48, 48, 48)
         Note over GVM: Phase 7 (Optional): GitHub Secret Hunt
         User->>GVM: Trigger GitHub Hunt from UI
         GVM->>GVM: Load project settings (token, org, options)
@@ -1470,9 +1490,8 @@ LangGraph-based autonomous agent with ReAct pattern.
 - **Live Guidance**: Send steering messages to the agent while it works
 - **Stop & Resume**: Interrupt execution and resume from the last checkpoint
 
-📖 **[Read Agentic Documentation](agentic/README.AGENTIC.md)**
-📖 **[Metasploit Integration Guide](agentic/README.METASPLOIT.GUIDE.md)**
-📖 **[Attack Paths Architecture](agentic/README.ATTACK_PATHS.md)**
+📖 **[Read Agentic Documentation](agentic/readmes/README.PENTEST_AGENT.md)**
+📖 **[Attack Paths Architecture](agentic/readmes/README.ATTACK_PATHS.md)**
 
 ---
 
@@ -1580,6 +1599,7 @@ These containers are designed to be deployed alongside the main stack so the AI 
 | **LangGraph** | State machine engine implementing the ReAct (Reasoning + Acting) agent loop |
 | **OpenAI** (Direct) | Supported LLM family — GPT-5.2, GPT-5, GPT-4.1. Requires `OPENAI_API_KEY` |
 | **Anthropic** (Direct) | Supported LLM family — Claude Opus 4.6, Sonnet 4.5, Haiku 4.5. Requires `ANTHROPIC_API_KEY` |
+| **OpenAI-Compatible** | Any OpenAI-compatible endpoint (for example Ollama). Requires `OPENAI_COMPAT_BASE_URL`; optional `OPENAI_COMPAT_API_KEY` |
 | **OpenRouter** | Multi-model gateway — access 300+ models (Llama 4, Gemini 3, Mistral, Qwen, etc.) through a single API key. Uses OpenAI-compatible endpoint. Requires `OPENROUTER_API_KEY` |
 | **AWS Bedrock** | Managed AWS service — access foundation models (Claude, Titan, Llama, Cohere, etc.) via `langchain-aws`. Requires `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` |
 | **Tavily** | AI-powered web search used by the agent for CVE research and exploit intelligence |
@@ -1676,9 +1696,9 @@ These containers are designed to be deployed alongside the main stack so the AI 
 | Graph Schema | [graph_db/readmes/GRAPH.SCHEMA.md](graph_db/readmes/GRAPH.SCHEMA.md) |
 | PostgreSQL Database | [postgres_db/README.md](postgres_db/README.md) |
 | MCP Servers | [mcp/README.MCP.md](mcp/README.MCP.md) |
-| AI Agent | [agentic/README.AGENTIC.md](agentic/README.AGENTIC.md) |
-| Attack Paths | [agentic/README.ATTACK_PATHS.md](agentic/README.ATTACK_PATHS.md) |
-| Metasploit Guide | [agentic/README.METASPLOIT.GUIDE.md](agentic/README.METASPLOIT.GUIDE.md) |
+| AI Agent | [agentic/readmes/README.PENTEST_AGENT.md](agentic/readmes/README.PENTEST_AGENT.md) |
+| Attack Paths | [agentic/readmes/README.ATTACK_PATHS.md](agentic/readmes/README.ATTACK_PATHS.md) |
+| CypherFix Agents | [agentic/readmes/README.CYPHERFIX_AGENTS.md](agentic/readmes/README.CYPHERFIX_AGENTS.md) |
 | Webapp | [webapp/README.WEBAPP.md](webapp/README.WEBAPP.md) |
 | GVM Scanner | [gvm_scan/README.GVM.md](gvm_scan/README.GVM.md) |
 | GitHub Secret Hunter | [github_secret_hunt/README.md](github_secret_hunt/README.md) |
@@ -1686,6 +1706,119 @@ These containers are designed to be deployed alongside the main stack so the AI 
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Full Disclaimer | [DISCLAIMER.md](DISCLAIMER.md) |
 | License | [LICENSE](LICENSE) |
+| **Wiki** | **[Full User Guide & Documentation](https://github.com/samugit83/redamon/wiki)** |
+
+---
+
+## Data Export & Import
+
+RedAmon supports full project backup and restore through the web interface. Each export produces a portable ZIP archive containing all project data, which can be imported on any RedAmon instance.
+
+### What's Included in an Export
+
+| Data | Source | Description |
+|------|--------|-------------|
+| **Project Settings** | PostgreSQL | All 300+ configuration fields (scan modules, tool parameters, agent behaviour, attack paths) |
+| **Agent Conversations** | PostgreSQL | Complete chat history with the AI agent, including tool calls and responses |
+| **Attack Surface Graph** | Neo4j | All nodes (domains, subdomains, IPs, ports, services, URLs, vulnerabilities, CVEs, etc.) and their relationships |
+| **Recon Output** | Filesystem | Raw JSON output from the reconnaissance pipeline |
+| **GVM Results** | Filesystem | Raw JSON output from OpenVAS/GVM vulnerability scans |
+| **GitHub Hunt Results** | Filesystem | Raw JSON output from GitHub secret scanning |
+
+### Export a Project
+
+1. Navigate to **Projects** and select a project
+2. Open **Project Settings** (gear icon)
+3. Click the **Export** button in the header
+4. A ZIP file will download automatically
+
+### Import a Project
+
+1. Navigate to **Projects**
+2. Select the **user** who will own the imported project
+3. Click the **Import Project** button
+4. Select a previously exported ZIP file
+5. The project will be created under the selected user with all data restored
+
+> **Note**: Imported projects receive new internal IDs. The original project name, settings, conversations, and graph data are fully preserved. You can import the same backup multiple times or under different users.
+
+---
+
+## Updating to a New Version
+
+When updating RedAmon to a new version, all Docker images and volumes are rebuilt from scratch. Follow these steps to preserve your data across updates.
+
+> **Warning**: Step 4 removes all database volumes. Any data not exported will be permanently lost.
+
+### Step-by-Step Update Process
+
+**1. Export all projects**
+
+Before updating, go to the web interface and export every project you want to keep:
+- Open each project's **Settings** page
+- Click **Export** to download the backup ZIP
+- Save all ZIP files in a safe location outside the project directory
+
+**2. Stop all containers**
+
+```bash
+docker compose down
+```
+
+**3. Pull the latest version**
+
+```bash
+git pull origin master
+```
+
+**4. Remove old images, containers, and volumes**
+
+```bash
+docker compose down --rmi all --volumes
+```
+
+This removes all containers, images, and data volumes for a clean rebuild.
+
+**5. Rebuild everything from scratch**
+
+Build the core services and the on-demand tool images (recon scanner, vulnerability scanner, GitHub secret hunter):
+
+```bash
+docker compose build --no-cache
+docker compose --profile tools build --no-cache
+```
+
+**6. Start the new version**
+
+**Full stack** (with GVM/OpenVAS vulnerability scanner):
+
+```bash
+docker compose up -d
+```
+
+**Core services only** (without GVM — faster startup, lower resource usage):
+
+```bash
+docker compose up -d postgres neo4j recon-orchestrator kali-sandbox agent webapp
+```
+
+> Use the core-only option if you don't need network vulnerability scanning (GVM/OpenVAS). You can always start the GVM services later with `docker compose up -d`.
+
+**7. Wait for initialization**
+
+Wait for all services to become healthy. If using the full stack with GVM, the first launch requires ~30 minutes for vulnerability feed synchronization.
+
+```bash
+docker compose ps   # check service status
+```
+
+**8. Import your projects**
+
+Once all services are running:
+1. Open the web interface at `http://localhost:3000`
+2. Create or select a user
+3. Click **Import Project** and upload each exported ZIP file
+4. Verify that your projects, graph data, and conversations are restored
 
 ---
 

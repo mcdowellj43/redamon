@@ -42,11 +42,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, targetDomain, ...optionalParams } = body
+    const { userId, name, targetDomain, ipMode, ...optionalParams } = body
 
-    if (!userId || !name || !targetDomain) {
+    if (!userId || !name) {
       return NextResponse.json(
-        { error: 'userId, name, and targetDomain are required' },
+        { error: 'userId and name are required' },
+        { status: 400 }
+      )
+    }
+
+    // targetDomain is required only when not in IP mode
+    if (!ipMode && !targetDomain) {
+      return NextResponse.json(
+        { error: 'targetDomain is required when not in IP mode' },
         { status: 400 }
       )
     }
@@ -65,7 +73,8 @@ export async function POST(request: NextRequest) {
       data: {
         userId,
         name,
-        targetDomain,
+        targetDomain: ipMode ? '' : targetDomain,
+        ipMode: ipMode || false,
         ...optionalParams
       }
     })

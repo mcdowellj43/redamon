@@ -1,0 +1,661 @@
+"""Think node — core ReAct reasoning with LLM decision, output analysis, and chain memory."""
+
+import asyncio
+import logging
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+from state import (
+    AgentState,
+    ExecutionStep,
+    LLMDecision,
+    PhaseHistoryEntry,
+    PhaseTransitionRequest,
+    TargetInfo,
+    UserQuestionRequest,
+    format_chain_context,
+    format_todo_list,
+    format_qa_history,
+    format_objective_history,
+)
+import orchestrator_helpers.chain_graph_writer as chain_graph
+from orchestrator_helpers.json_utils import json_dumps_safe, normalize_content
+from orchestrator_helpers.parsing import try_parse_llm_decision
+from orchestrator_helpers.config import get_identifiers, is_session_config_complete
+from project_settings import get_setting, get_allowed_tools_for_phase
+from prompts import (
+    REACT_SYSTEM_PROMPT,
+    PENDING_OUTPUT_ANALYSIS_SECTION,
+    get_phase_tools,
+    build_phase_definitions,
+    build_informational_guidance,
+    build_attack_path_behavior,
+    build_tool_name_enum,
+    build_tool_args_section,
+    build_dynamic_rules,
+)
+from tools import set_tenant_context, set_phase_context
+
+logger = logging.getLogger(__name__)
+
+
+async def think_node(state: AgentState, config, *, llm, guidance_queues, neo4j_creds) -> dict:
+    """
+    Core ReAct reasoning node.
+
+    Analyzes previous steps, updates todo list, and decides next action.
+
+    Args:
+        state: Current agent state.
+        config: LangGraph config with user/project/session identifiers.
+        llm: The LLM instance for reasoning.
+        guidance_queues: Dict of session_id -> asyncio.Queue for user guidance messages.
+        neo4j_creds: Tuple of (neo4j_uri, neo4j_user, neo4j_password).
+    """
+    user_id, project_id, session_id = get_identifiers(state, config)
+    neo4j_uri, neo4j_user, neo4j_password = neo4j_creds
+
+    iteration = state.get("current_iteration", 0) + 1
+    phase = state.get("current_phase", "informational")
+
+    # Check if we just transitioned - log and clear the marker
+    just_transitioned = state.get("_just_transitioned_to")
+    if just_transitioned:
+        logger.info(f"[{user_id}/{project_id}/{session_id}] Just transitioned to {just_transitioned}, now in phase: {phase}")
+
+    logger.info(f"[{user_id}/{project_id}/{session_id}] Think node - iteration {iteration}, phase: {phase}")
+
+    # Set context for tools
+    set_tenant_context(user_id, project_id)
+    set_phase_context(phase)
+
+    # Get current objective from conversation objectives
+    objectives = state.get("conversation_objectives", [])
+    current_idx = state.get("current_objective_index", 0)
+
+    if current_idx < len(objectives):
+        current_objective = objectives[current_idx].get("content", "No objective specified")
+    else:
+        # Fallback to original_objective for backward compatibility
+        current_objective = state.get("original_objective", "No objective specified")
+
+    # Build the prompt with current state
+    chain_context_formatted = format_chain_context(
+        chain_findings=state.get("chain_findings_memory", []),
+        chain_failures=state.get("chain_failures_memory", []),
+        chain_decisions=state.get("chain_decisions_memory", []),
+        execution_trace=state.get("execution_trace", []),
+    )
+    todo_list_formatted = format_todo_list(state.get("todo_list", []))
+    target_info_formatted = json_dumps_safe(state.get("target_info", {}), indent=2)
+    qa_history_formatted = format_qa_history(state.get("qa_history", []))
+    objective_history_formatted = format_objective_history(state.get("objective_history", []))
+
+    # Get phase tools with attack path type for dynamic routing
+    attack_path_type = state.get("attack_path_type", "cve_exploit")
+    available_tools = get_phase_tools(
+        phase,
+        get_setting('ACTIVATE_POST_EXPL_PHASE', True),
+        get_setting('POST_EXPL_PHASE_TYPE', 'statefull'),
+        attack_path_type,
+        execution_trace=state.get("execution_trace", []),
+    )
+
+    allowed_tools = get_allowed_tools_for_phase(phase)
+
+    system_prompt = REACT_SYSTEM_PROMPT.format(
+        current_phase=phase,
+        phase_definitions=build_phase_definitions(),
+        informational_guidance=build_informational_guidance(phase),
+        attack_path_type=attack_path_type,
+        attack_path_behavior=build_attack_path_behavior(attack_path_type),
+        available_tools=available_tools,
+        tool_name_enum=build_tool_name_enum(allowed_tools),
+        tool_args_section=build_tool_args_section(allowed_tools),
+        dynamic_rules=build_dynamic_rules(allowed_tools),
+        iteration=iteration,
+        max_iterations=state.get("max_iterations", get_setting('MAX_ITERATIONS', 100)),
+        objective=current_objective,
+        objective_history_summary=objective_history_formatted,
+        prior_chain_history=state.get("_prior_chain_context") or "No prior sessions.",
+        chain_context=chain_context_formatted,
+        todo_list=todo_list_formatted,
+        target_info=target_info_formatted,
+        qa_history=qa_history_formatted,
+    )
+
+    # Inject stealth mode rules if enabled (prepended for maximum priority)
+    if get_setting('STEALTH_MODE', False):
+        from prompts.stealth_rules import STEALTH_MODE_RULES
+        system_prompt = STEALTH_MODE_RULES + "\n\n" + system_prompt
+        logger.info(f"[{user_id}/{project_id}/{session_id}] STEALTH MODE active — injected stealth rules into prompt")
+
+    # Failure loop detection: if 3+ consecutive similar failures, inject warning
+    exec_trace = state.get("execution_trace", [])
+    if len(exec_trace) >= 3:
+        consecutive_failures = 0
+        last_pattern = None
+        for step in reversed(exec_trace[-6:]):
+            output_lower = ((step.get("tool_output") or "")[:500]).lower()
+            is_failure = (
+                not step.get("success", True)
+                or "failed" in output_lower
+                or "error" in output_lower
+                or "exploit completed, but no session" in output_lower
+            )
+            if is_failure:
+                pattern = f"{step.get('tool_name')}:{str(step.get('tool_args', {}))[:80]}"
+                if last_pattern is None or pattern == last_pattern:
+                    consecutive_failures += 1
+                    last_pattern = pattern
+                else:
+                    break
+            else:
+                break
+
+        if consecutive_failures >= 3:
+            system_prompt += (
+                "\n\n## FAILURE LOOP DETECTED\n\n"
+                "You have failed 3+ times with a similar approach. You MUST try a completely "
+                "different strategy: use `web_search` for alternative techniques, try a different "
+                "tool or payload, or use action='ask_user' for guidance. Do NOT retry the same approach.\n"
+            )
+
+    # CHECK: Is there a pending tool output to analyze?
+    pending_step = state.get("_current_step")
+    has_pending_output = (
+        pending_step and
+        pending_step.get("tool_output") is not None and
+        not pending_step.get("output_analysis")
+    )
+
+    if has_pending_output:
+        tool_output_raw = pending_step.get("tool_output") or pending_step.get("error_message") or "No output"
+        output_section = PENDING_OUTPUT_ANALYSIS_SECTION.format(
+            tool_name=pending_step.get("tool_name", "unknown"),
+            tool_args=json_dumps_safe(pending_step.get("tool_args") or {}),
+            success=pending_step.get("success", False),
+            tool_output=tool_output_raw[:get_setting('TOOL_OUTPUT_MAX_CHARS', 20000)],
+        )
+        system_prompt = system_prompt + "\n" + output_section
+        logger.info(f"[{user_id}/{project_id}/{session_id}] Injected output analysis section for tool: {pending_step.get('tool_name')}")
+
+    # Drain pending guidance messages from user (per-session queue)
+    guidance_messages = []
+    guidance_queue = guidance_queues.get(session_id)
+    if guidance_queue:
+        while not guidance_queue.empty():
+            try:
+                guidance_messages.append(guidance_queue.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+
+    if guidance_messages:
+        guidance_section = (
+            "\n\n## USER GUIDANCE (IMPORTANT)\n\n"
+            "The user sent these guidance messages while you were working. "
+            "They refine your CURRENT objective — do NOT treat them as new tasks. "
+            "Adjust your plan and next action accordingly:\n\n"
+        )
+        for i, msg in enumerate(guidance_messages, 1):
+            guidance_section += f"{i}. {msg}\n"
+        guidance_section += "\nAcknowledge this guidance in your thought.\n"
+        system_prompt += guidance_section
+        logger.info(f"[{user_id}/{project_id}/{session_id}] Injected {len(guidance_messages)} guidance messages into prompt")
+
+    # Log the full prompt for debugging
+    logger.info(f"\n{'#'*80}")
+    logger.info(f"# THINK NODE PROMPT - Iteration {iteration} - Phase: {phase}")
+    logger.info(f"{'#'*80}")
+    logger.info(f"\n--- CHAIN CONTEXT ---\n{chain_context_formatted}")
+    logger.info(f"\n--- TODO LIST ---\n{todo_list_formatted}")
+    logger.info(f"\n--- TARGET INFO ---\n{target_info_formatted}")
+    logger.info(f"\n--- Q&A HISTORY ---\n{qa_history_formatted}")
+    logger.info(f"\n--- FULL SYSTEM PROMPT ({len(system_prompt)} chars) ---")
+    chunk_size = 4000
+    for i in range(0, len(system_prompt), chunk_size):
+        chunk = system_prompt[i:i+chunk_size]
+        logger.info(f"PROMPT[{i}:{i+len(chunk)}]:\n{chunk}")
+    logger.info(f"{'#'*80}\n")
+
+    # Get LLM decision with retry on parse failures
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content="Based on the current state, what is your next action? Output EXACTLY ONE valid JSON object and nothing else. Do NOT simulate tool execution - you will receive actual tool output after submitting your decision. Do NOT output multiple JSON objects or continue the conversation - just ONE decision JSON.")
+    ]
+
+    max_retries = get_setting('LLM_PARSE_MAX_RETRIES', 3)
+    decision = None
+    last_error = None
+    response_text = ""
+
+    for attempt in range(max_retries):
+        if attempt > 0:
+            logger.warning(f"[{user_id}/{project_id}/{session_id}] Parse attempt {attempt}/{max_retries} failed: {last_error}")
+            messages.append(AIMessage(content=response_text))
+            messages.append(HumanMessage(
+                content=f"Your previous JSON response failed validation:\n{last_error}\n\n"
+                        f"Fix the error and output EXACTLY ONE valid JSON object. No extra text."
+            ))
+
+        response = await llm.ainvoke(messages)
+        response_text = normalize_content(response.content).strip()
+
+        logger.info(f"\n{'='*60}")
+        logger.info(f"LLM RAW RESPONSE - Iteration {iteration} (attempt {attempt+1}/{max_retries})")
+        logger.info(f"{'='*60}")
+        logger.info(f"{response_text}")
+        logger.info(f"{'='*60}\n")
+
+        decision, last_error = try_parse_llm_decision(response_text)
+        if decision:
+            break
+
+    # If all retries failed, use the fallback
+    if not decision:
+        logger.error(f"[{user_id}/{project_id}/{session_id}] All {max_retries} parse attempts failed: {last_error}")
+        decision = LLMDecision(
+            thought=response_text,
+            reasoning="Failed to parse structured response after retries",
+            action="complete",
+            completion_reason=f"Unable to continue: JSON parsing failed after {max_retries} attempts",
+            updated_todo_list=[],
+        )
+
+    logger.info(f"[{user_id}/{project_id}/{session_id}] Decision: action={decision.action}, tool={decision.tool_name}")
+
+    # Detailed logging for debugging
+    logger.info(f"\n{'='*60}")
+    logger.info(f"THINK NODE - Iteration {iteration} - Phase: {phase}")
+    logger.info(f"{'='*60}")
+    logger.info(f"THOUGHT: {decision.thought}")
+    logger.info(f"REASONING: {decision.reasoning}")
+    logger.info(f"ACTION: {decision.action}")
+    if decision.tool_name:
+        logger.info(f"TOOL: {decision.tool_name}")
+        logger.info(f"TOOL_ARGS: {json_dumps_safe(decision.tool_args, indent=2) if decision.tool_args else 'None'}")
+    if decision.phase_transition:
+        logger.info(f"PHASE_TRANSITION: {decision.phase_transition.to_phase}")
+
+    # Log todo list updates
+    if decision.updated_todo_list:
+        logger.info(f"TODO LIST ({len(decision.updated_todo_list)} items):")
+        for todo in decision.updated_todo_list:
+            status_icon = {
+                "pending": "[ ]",
+                "in_progress": "[~]",
+                "completed": "[x]",
+                "blocked": "[!]"
+            }.get(todo.status, "[ ]")
+            priority_marker = {"high": "!!!", "medium": "!!", "low": "!"}.get(todo.priority, "!!")
+            logger.info(f"  {status_icon} {priority_marker} {todo.description}")
+    else:
+        logger.info(f"TODO LIST: (no updates)")
+
+    # Log Q&A history if present
+    qa_history = state.get("qa_history", [])
+    if qa_history:
+        logger.info(f"Q&A HISTORY ({len(qa_history)} entries):")
+        for i, entry in enumerate(qa_history, 1):
+            q = entry.get("question", {})
+            a = entry.get("answer", {})
+            logger.info(f"  Q{i}: {q.get('question', 'N/A')[:10000]}")
+            logger.info(f"      Answer: {a.get('answer', 'N/A')[:10000] if a else '(unanswered)'}")
+    else:
+        logger.info(f"Q&A HISTORY: (none)")
+
+    # Log user_question if action is ask_user
+    if decision.action == "ask_user" and decision.user_question:
+        logger.info(f"USER_QUESTION:")
+        logger.info(f"  Question: {decision.user_question.question}")
+        logger.info(f"  Context: {decision.user_question.context}")
+        logger.info(f"  Format: {decision.user_question.format}")
+        if decision.user_question.options:
+            logger.info(f"  Options: {decision.user_question.options}")
+
+    logger.info(f"{'='*60}\n")
+
+    # Create execution step
+    step = ExecutionStep(
+        iteration=iteration,
+        phase=phase,
+        thought=decision.thought,
+        reasoning=decision.reasoning,
+        tool_name=decision.tool_name if decision.action == "use_tool" else None,
+        tool_args=decision.tool_args if decision.action == "use_tool" else None,
+    )
+
+    # Convert todo list updates to dicts for state storage
+    todo_list = [item.model_dump() for item in decision.updated_todo_list] if decision.updated_todo_list else state.get("todo_list", [])
+
+    # Build state updates
+    updates = {
+        "current_iteration": iteration,
+        "todo_list": todo_list,
+        "_current_step": step.model_dump(),
+        "_decision": decision.model_dump(),
+        "_just_transitioned_to": None,  # Clear the marker
+        "_completed_step": None,  # Will be set if we process pending output
+    }
+
+    # Process output analysis if we had pending tool output
+    if has_pending_output:
+        step_iteration = pending_step.get("iteration", iteration)
+
+        if decision.output_analysis:
+            analysis = decision.output_analysis
+
+            # Update step with analysis data
+            pending_step["output_analysis"] = analysis.interpretation
+            pending_step["actionable_findings"] = analysis.actionable_findings or []
+            pending_step["recommended_next_steps"] = analysis.recommended_next_steps or []
+
+            # Log analysis results
+            logger.info(f"\n{'='*60}")
+            logger.info(f"OUTPUT ANALYSIS (inline) - Iteration {iteration} - Phase: {phase}")
+            logger.info(f"{'='*60}")
+            logger.info(f"TOOL: {pending_step.get('tool_name')}")
+            logger.info(f"INTERPRETATION: {analysis.interpretation[:2000]}")
+            if analysis.actionable_findings:
+                logger.info(f"ACTIONABLE FINDINGS: {analysis.actionable_findings}")
+            if analysis.recommended_next_steps:
+                logger.info(f"RECOMMENDED NEXT STEPS: {analysis.recommended_next_steps}")
+            if analysis.exploit_succeeded:
+                logger.info(f"EXPLOIT SUCCEEDED: {analysis.exploit_details}")
+            logger.info(f"{'='*60}\n")
+
+            # Merge target info
+            current_target = TargetInfo(**state.get("target_info", {}))
+            extracted = analysis.extracted_info
+            new_target = TargetInfo(
+                primary_target=extracted.primary_target,
+                ports=extracted.ports,
+                services=extracted.services,
+                technologies=extracted.technologies,
+                vulnerabilities=extracted.vulnerabilities,
+                credentials=extracted.credentials,
+                sessions=extracted.sessions,
+            )
+            merged_target = current_target.merge_from(new_target)
+
+            # --- Chain Memory Population ---
+            step_id = pending_step.get("step_id")
+
+            # 1. Populate chain_findings_memory
+            chain_findings_mem = list(state.get("chain_findings_memory", []))
+            if analysis.chain_findings:
+                for cf in analysis.chain_findings:
+                    finding_dict = cf.model_dump() if hasattr(cf, 'model_dump') else (cf if isinstance(cf, dict) else {})
+                    finding_dict["step_iteration"] = step_iteration
+                    chain_findings_mem.append(finding_dict)
+            elif analysis.actionable_findings:
+                for af_text in analysis.actionable_findings:
+                    chain_findings_mem.append({
+                        "finding_type": "custom",
+                        "severity": "info",
+                        "title": af_text[:200],
+                        "evidence": "",
+                        "step_iteration": step_iteration,
+                        "confidence": 60,
+                    })
+            # Exploit success also goes into findings memory
+            if analysis.exploit_succeeded and analysis.exploit_details:
+                details = analysis.exploit_details
+                chain_findings_mem.append({
+                    "finding_type": "exploit_success",
+                    "severity": "critical",
+                    "title": f"Exploit success: {details.get('evidence', '')[:100]}",
+                    "evidence": details.get("evidence", ""),
+                    "step_iteration": step_iteration,
+                    "confidence": 95,
+                    "related_cves": details.get("cve_ids", []),
+                    "related_ips": [details.get("target_ip", "")] if details.get("target_ip") else [],
+                })
+            updates["chain_findings_memory"] = chain_findings_mem
+
+            # 2. Populate chain_failures_memory if step failed
+            if not pending_step.get("success"):
+                chain_failures_mem = list(state.get("chain_failures_memory", []))
+                chain_failures_mem.append({
+                    "step_iteration": step_iteration,
+                    "failure_type": "tool_error",
+                    "tool_name": pending_step.get("tool_name", ""),
+                    "error_message": pending_step.get("error_message", ""),
+                    "lesson_learned": analysis.interpretation[:300] if analysis else "",
+                })
+                updates["chain_failures_memory"] = chain_failures_mem
+
+            # 3. Write ChainStep to Neo4j (via executor to avoid blocking the event loop)
+            prev_step_id = state.get("_last_chain_step_id")
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: chain_graph.sync_record_step(
+                    neo4j_uri, neo4j_user, neo4j_password,
+                    step_id=step_id,
+                    chain_id=session_id,
+                    prev_step_id=prev_step_id,
+                    user_id=user_id, project_id=project_id,
+                    iteration=step_iteration, phase=phase,
+                    tool_name=pending_step.get("tool_name"),
+                    tool_args_summary=str(pending_step.get("tool_args", {}))[:500],
+                    thought=pending_step.get("thought", "")[:20000],
+                    reasoning=pending_step.get("reasoning", "")[:20000],
+                    output_summary=(pending_step.get("tool_output") or "")[:20000],
+                    output_analysis=analysis.interpretation[:20000] if analysis else "",
+                    success=pending_step.get("success", True),
+                    error_message=pending_step.get("error_message"),
+                    extracted_info=analysis.extracted_info.model_dump() if analysis and analysis.extracted_info else {},
+                ),
+            )
+            updates["_last_chain_step_id"] = step_id
+
+            # 4. Fire-and-forget: write exploit success (AFTER step so PRODUCED link works)
+            if analysis.exploit_succeeded and analysis.exploit_details and phase == "exploitation":
+                details = analysis.exploit_details
+                try:
+                    chain_graph.fire_record_exploit_success(
+                        neo4j_uri, neo4j_user, neo4j_password,
+                        chain_id=session_id,
+                        step_id=step_id,
+                        user_id=user_id,
+                        project_id=project_id,
+                        attack_type=details.get("attack_type", state.get("attack_path_type", "cve_exploit")),
+                        target_ip=details.get("target_ip", merged_target.primary_target),
+                        target_port=details.get("target_port"),
+                        cve_ids=details.get("cve_ids", merged_target.vulnerabilities),
+                        session_id=details.get("session_id"),
+                        username=details.get("username"),
+                        password_found=details.get("password"),
+                        evidence=details.get("evidence", ""),
+                        execution_trace=state.get("execution_trace", []),
+                        iteration=step_iteration,
+                    )
+                    logger.info(f"[{user_id}/{project_id}/{session_id}] Exploit success detected - ChainFinding created")
+                except Exception as e:
+                    logger.error(f"[{user_id}/{project_id}/{session_id}] Failed to record exploit success: {e}")
+
+            # 5. Fire-and-forget: write other ChainFindings (skip exploit-related if already recorded)
+            _EXPLOIT_OVERLAP_TYPES = {"exploit_success", "access_gained", "credential_found"}
+            for cf in (analysis.chain_findings or []):
+                if analysis.exploit_succeeded and cf.finding_type in _EXPLOIT_OVERLAP_TYPES:
+                    continue
+                chain_graph.fire_record_finding(
+                    neo4j_uri, neo4j_user, neo4j_password,
+                    chain_id=session_id, step_id=step_id,
+                    user_id=user_id, project_id=project_id,
+                    finding_type=cf.finding_type, severity=cf.severity,
+                    title=cf.title, evidence=cf.evidence,
+                    confidence=cf.confidence, phase=phase,
+                    iteration=step_iteration,
+                    related_cves=cf.related_cves, related_ips=cf.related_ips,
+                )
+
+            # 6. Fire-and-forget: write ChainFailure if failed
+            if not pending_step.get("success"):
+                chain_graph.fire_record_failure(
+                    neo4j_uri, neo4j_user, neo4j_password,
+                    chain_id=session_id, step_id=step_id,
+                    user_id=user_id, project_id=project_id,
+                    failure_type="tool_error",
+                    tool_name=pending_step.get("tool_name", ""),
+                    error_message=pending_step.get("error_message", ""),
+                    lesson_learned=analysis.interpretation[:20000] if analysis else "",
+                    phase=phase,
+                    iteration=step_iteration,
+                )
+
+            # Append completed step to execution trace
+            execution_trace = state.get("execution_trace", []) + [pending_step]
+            updates["execution_trace"] = execution_trace
+            updates["target_info"] = merged_target.model_dump()
+            updates["_completed_step"] = pending_step
+            updates["messages"] = [AIMessage(content=f"**Step {pending_step.get('iteration')}** [{phase}]\n\n{analysis.interpretation}")]
+
+        else:
+            # LLM didn't return analysis — use raw output as fallback
+            logger.warning(f"[{user_id}/{project_id}/{session_id}] No output_analysis in LLM response, using fallback")
+            pending_step["output_analysis"] = (pending_step.get("tool_output") or "")[:20000]
+            pending_step["actionable_findings"] = []
+            pending_step["recommended_next_steps"] = []
+            execution_trace = state.get("execution_trace", []) + [pending_step]
+            updates["execution_trace"] = execution_trace
+            updates["_completed_step"] = pending_step
+
+    # Handle different actions
+    if decision.action == "complete":
+        updates["task_complete"] = True
+        updates["completion_reason"] = decision.completion_reason or "Task completed"
+
+    elif decision.action == "transition_phase":
+        phase_transition = decision.phase_transition
+        to_phase = phase_transition.to_phase if phase_transition else "exploitation"
+
+        # Block post-exploitation if ACTIVATE_POST_EXPL_PHASE=False
+        if to_phase == "post_exploitation" and not get_setting('ACTIVATE_POST_EXPL_PHASE', True):
+            logger.warning(f"[{user_id}/{project_id}/{session_id}] Blocking post_exploitation transition: ACTIVATE_POST_EXPL_PHASE=False")
+            updates["task_complete"] = True
+            updates["completion_reason"] = "Exploitation completed. Post-exploitation phase is disabled."
+            updates["messages"] = [
+                AIMessage(content="Exploitation completed successfully. "
+                                 "Post-exploitation phase is not available because ACTIVATE_POST_EXPL_PHASE=False. "
+                                 "If you need post-exploitation capabilities, enable it in the project settings.")
+            ]
+            return updates
+
+        # Ignore transition to same phase - just continue
+        if to_phase == phase:
+            logger.warning(f"[{user_id}/{project_id}/{session_id}] Ignoring transition to same phase: {phase}")
+            if decision.tool_name:
+                updates["_decision"]["action"] = "use_tool"
+            else:
+                logger.info(f"[{user_id}/{project_id}/{session_id}] No tool specified, looping back to think")
+            return updates
+
+        # Also ignore if we JUST transitioned to this phase
+        if just_transitioned and to_phase == just_transitioned:
+            logger.warning(f"[{user_id}/{project_id}/{session_id}] Ignoring re-request for recent transition to: {to_phase}")
+            if decision.tool_name:
+                updates["_decision"]["action"] = "use_tool"
+            else:
+                logger.info(f"[{user_id}/{project_id}/{session_id}] No tool specified, looping back to think")
+            return updates
+
+        # AUTO-APPROVE: Downgrade to informational (safe, no approval needed)
+        if to_phase == "informational" and phase in ["exploitation", "post_exploitation"]:
+            logger.info(f"[{user_id}/{project_id}/{session_id}] Auto-approving safe downgrade: {phase} → informational")
+            updates["current_phase"] = to_phase
+            updates["phase_history"] = state.get("phase_history", []) + [
+                PhaseHistoryEntry(phase=to_phase).model_dump()
+            ]
+            updates["_just_transitioned_to"] = to_phase
+            updates["messages"] = [
+                AIMessage(content=f"Automatically transitioned from {phase} to informational phase for new objective.")
+            ]
+            return updates
+
+        # Check if approval is required
+        needs_approval = (
+            (to_phase == "exploitation" and get_setting('REQUIRE_APPROVAL_FOR_EXPLOITATION', True)) or
+            (to_phase == "post_exploitation" and get_setting('REQUIRE_APPROVAL_FOR_POST_EXPLOITATION', True))
+        )
+
+        if needs_approval:
+            updates["phase_transition_pending"] = PhaseTransitionRequest(
+                from_phase=phase,
+                to_phase=to_phase,
+                reason=phase_transition.reason if phase_transition else "",
+                planned_actions=phase_transition.planned_actions if phase_transition else [],
+                risks=phase_transition.risks if phase_transition else [],
+            ).model_dump()
+            updates["awaiting_user_approval"] = True
+        else:
+            logger.info(f"[{user_id}/{project_id}/{session_id}] Auto-approving phase transition (approval not required): {phase} → {to_phase}")
+            updates["current_phase"] = to_phase
+            updates["phase_history"] = state.get("phase_history", []) + [
+                PhaseHistoryEntry(phase=to_phase).model_dump()
+            ]
+            updates["_just_transitioned_to"] = to_phase
+            updates["messages"] = [
+                AIMessage(content=f"Phase transition from {phase} to {to_phase} auto-approved (approval not required in settings). Now operating in {to_phase} phase. Proceed with the objective.")
+            ]
+
+    elif decision.action == "ask_user":
+        user_q = decision.user_question
+        if user_q:
+            logger.info(f"[{user_id}/{project_id}/{session_id}] Asking user: {user_q.question[:10000]}")
+            updates["pending_question"] = UserQuestionRequest(
+                question=user_q.question,
+                context=user_q.context,
+                format=user_q.format,
+                options=user_q.options,
+                default_value=user_q.default_value,
+                phase=phase,
+            ).model_dump()
+            updates["awaiting_user_question"] = True
+        else:
+            logger.warning(f"[{user_id}/{project_id}/{session_id}] ask_user action but no user_question provided")
+
+    # Pre-exploitation validation: Force ask_user when session params are missing
+    if (get_setting('POST_EXPL_PHASE_TYPE', 'statefull') == "statefull" and
+        state.get("attack_path_type") == "cve_exploit" and
+        decision.action == "use_tool" and
+        decision.tool_name == "metasploit_console" and
+        not updates.get("awaiting_user_question")):
+
+        config_complete, missing_params = is_session_config_complete()
+
+        if not config_complete:
+            qa_history = state.get("qa_history", [])
+            answered_params = set()
+            for qa in qa_history:
+                answer = qa.get("answer", {})
+                answer_text = answer.get("answer", "") if answer else ""
+                question_obj = qa.get("question", {})
+                question_text = question_obj.get("question", "") if question_obj else ""
+
+                if answer_text:
+                    if "LHOST" in question_text.upper():
+                        answered_params.add("LHOST")
+                    if "LPORT" in question_text.upper():
+                        answered_params.add("LPORT")
+                    if "BIND" in question_text.upper():
+                        answered_params.add("LPORT or BIND_PORT_ON_TARGET")
+
+            still_missing = [p for p in missing_params if p not in answered_params]
+
+            if still_missing:
+                logger.info(f"[{user_id}/{project_id}/{session_id}] Forcing ask_user: missing session params {still_missing}")
+                updates["_decision"]["action"] = "ask_user"
+                updates["pending_question"] = UserQuestionRequest(
+                    question=f"Please provide the following required parameters for session-based exploitation: {', '.join(still_missing)}",
+                    context="Session-based exploitation requires these parameters to be configured. "
+                            "LHOST is your attacker IP address where the target will connect back. "
+                            "LPORT is the port you will listen on. "
+                            "For bind payloads, BIND_PORT is the port the target will open.",
+                    format="text",
+                    phase=phase,
+                ).model_dump()
+                updates["awaiting_user_question"] = True
+
+    return updates

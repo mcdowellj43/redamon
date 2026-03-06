@@ -61,6 +61,10 @@ stop and inform the user honestly — do NOT proceed with noisy techniques.
 - FORBIDDEN tags: dos, fuzz, intrusive, sqli, rce, bruteforce
 - Allowed: passive template matching, CVE verification on specific targets
 
+### execute_hydra — FORBIDDEN
+- Hydra is a brute force tool. ALL brute force attacks are FORBIDDEN in stealth mode.
+- DO NOT use execute_hydra under any circumstances when stealth mode is active.
+
 ### kali_shell — RESTRICTED
 - Single-target, purpose-specific commands only
 - Allowed: passive lookups (whois, dig, host), downloading specific PoCs, running single-target scripts

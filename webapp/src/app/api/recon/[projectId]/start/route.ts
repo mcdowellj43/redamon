@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Verify project exists
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, userId: true, name: true, targetDomain: true }
+      select: { id: true, userId: true, name: true, targetDomain: true, ipMode: true, targetIps: true }
     })
 
     if (!project) {
@@ -25,7 +25,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    if (!project.targetDomain) {
+    // IP mode needs targetIps; domain mode needs targetDomain
+    if (project.ipMode) {
+      if (!project.targetIps || project.targetIps.length === 0) {
+        return NextResponse.json(
+          { error: 'Project has no target IPs configured' },
+          { status: 400 }
+        )
+      }
+    } else if (!project.targetDomain) {
       return NextResponse.json(
         { error: 'Project has no target domain configured' },
         { status: 400 }

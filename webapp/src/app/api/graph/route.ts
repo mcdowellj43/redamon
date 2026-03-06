@@ -107,21 +107,27 @@ export async function GET(request: NextRequest) {
 
       UNION
 
-      // Get Exploit nodes linked to IPs
-      MATCH (e:Exploit {project_id: $projectId})-[r13:TARGETED_IP]->(ip:IP)
-      RETURN e as n, r13 as r, ip as m
+      // Get AttackChain nodes and their relationships (HAS_STEP, CHAIN_TARGETS)
+      MATCH (ac:AttackChain {project_id: $projectId})-[r16]->(target)
+      RETURN ac as n, r16 as r, target as m
 
       UNION
 
-      // Get Exploit nodes linked to CVEs
-      MATCH (e:Exploit {project_id: $projectId})-[r14:EXPLOITED_CVE]->(c:CVE)
-      RETURN e as n, r14 as r, c as m
+      // Get ChainStep relationships (NEXT_STEP, PRODUCED, FAILED_WITH, LED_TO, STEP_TARGETED, STEP_EXPLOITED)
+      MATCH (s:ChainStep {project_id: $projectId})-[r17]->(target)
+      RETURN s as n, r17 as r, target as m
 
       UNION
 
-      // Get Exploit nodes linked to Ports (brute force)
-      MATCH (e:Exploit {project_id: $projectId})-[r15:VIA_PORT]->(p:Port)
-      RETURN e as n, r15 as r, p as m
+      // Get ChainFinding bridge relationships (FOUND_ON, FINDING_RELATES_CVE, CREDENTIAL_FOR)
+      MATCH (f:ChainFinding {project_id: $projectId})-[r18]->(target)
+      RETURN f as n, r18 as r, target as m
+
+      UNION
+
+      // Get ChainDecision outgoing relationships (DECISION_PRECEDED -> ChainStep)
+      MATCH (d:ChainDecision {project_id: $projectId})-[r19]->(target)
+      RETURN d as n, r19 as r, target as m
       `,
       { projectId }
     )
@@ -195,11 +201,13 @@ export async function DELETE(request: NextRequest) {
   const session = getSession()
 
   try {
-    // Only delete Exploit nodes — safety check via label
+    // Delete any node except Domain and Subdomain (protected)
     const result = await session.run(
       `
-      MATCH (n:Exploit)
-      WHERE id(n) = toInteger($nodeId) AND n.project_id = $projectId
+      MATCH (n)
+      WHERE id(n) = toInteger($nodeId)
+        AND n.project_id = $projectId
+        AND NOT (n:Domain OR n:Subdomain)
       DETACH DELETE n
       RETURN count(n) as deleted
       `,
@@ -210,7 +218,7 @@ export async function DELETE(request: NextRequest) {
 
     if (deleted === 0) {
       return NextResponse.json(
-        { error: 'Exploit node not found' },
+        { error: 'Node not found or not deletable' },
         { status: 404 }
       )
     }
@@ -386,15 +394,73 @@ function getNodeName(node: Neo4jNode): string {
     }
   }
 
-  // Special handling for Exploit nodes - show attack type and target
-  if (label === 'Exploit') {
-    const attackType = props.attack_type as string || ''
+  // Special handling for ExploitGvm nodes - show attack type and target
+  if (label === 'ExploitGvm') {
     const targetIp = props.target_ip as string || ''
-    if (attackType === 'cve_exploit') {
-      const cves = props.cve_ids as string[] || []
-      return `EXPLOITED\n${cves[0] || ''}\n${targetIp}`
+    const cves = props.cve_ids as string[] || []
+    return `GVM EXPLOIT\n${cves[0] || ''}\n${targetIp}`
+  }
+
+  // Special handling for AttackChain nodes - show title and status
+  if (label === 'AttackChain') {
+    const title = props.title as string || ''
+    const status = props.status as string || ''
+    const truncatedTitle = title.length > 30 ? title.substring(0, 30) + '...' : title
+    if (truncatedTitle && status) {
+      return `Step 0\nChain\n${truncatedTitle}\n[${status}]`
     }
-    return `EXPLOITED\n${props.username || ''}@${targetIp}`
+    return `Step 0\n${truncatedTitle || 'Attack Chain'}`
+  }
+
+  // Special handling for ChainStep nodes - show iteration, tool, and success
+  if (label === 'ChainStep') {
+    const iteration = props.iteration as number
+    const toolName = props.tool_name as string || ''
+    const success = props.success as boolean
+    const failTag = success === false ? '\n[FAIL]' : ''
+    if (toolName) {
+      return `Step ${iteration ?? '?'}\n${toolName}${failTag}`
+    }
+    return `Step ${iteration ?? '?'}`
+  }
+
+  // Special handling for ChainFinding nodes - show step, finding type and severity
+  if (label === 'ChainFinding') {
+    const iteration = props.iteration as number
+    const findingType = props.finding_type as string || ''
+    const severity = props.severity as string || ''
+    const title = props.title as string || ''
+    const truncatedTitle = title.length > 30 ? title.substring(0, 30) + '...' : title
+    const stepPrefix = iteration != null ? `Step ${iteration}\n` : ''
+    if (truncatedTitle) {
+      return `${stepPrefix}${truncatedTitle}\n[${severity.toUpperCase()}]`
+    }
+    return `${stepPrefix}${findingType}\n[${severity.toUpperCase()}]`
+  }
+
+  // Special handling for ChainDecision nodes - show step, decision type and direction
+  if (label === 'ChainDecision') {
+    const iteration = props.iteration as number
+    const decisionType = props.decision_type as string || ''
+    const fromState = props.from_state as string || ''
+    const toState = props.to_state as string || ''
+    const stepPrefix = iteration != null ? `Step ${iteration}\n` : ''
+    if (fromState && toState) {
+      return `${stepPrefix}${decisionType}\n${fromState} → ${toState}`
+    }
+    return `${stepPrefix}${decisionType || 'Decision'}`
+  }
+
+  // Special handling for ChainFailure nodes - show step, failure type and tool
+  if (label === 'ChainFailure') {
+    const iteration = props.iteration as number
+    const failureType = props.failure_type as string || ''
+    const toolName = props.tool_name as string || ''
+    const stepPrefix = iteration != null ? `Step ${iteration}\n` : ''
+    if (toolName) {
+      return `${stepPrefix}${failureType}\n${toolName}`
+    }
+    return `${stepPrefix}${failureType || 'Failure'}`
   }
 
   // Special handling for Vulnerability nodes - show name and severity

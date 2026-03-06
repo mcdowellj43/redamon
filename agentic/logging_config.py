@@ -3,7 +3,6 @@ RedAmon Agent Logging Configuration
 
 Configures logging with file rotation, console output, and proper formatting.
 """
-
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -16,6 +15,16 @@ from project_settings import get_setting
 
 # Log directory (relative to this file)
 LOG_DIR = Path(__file__).parent / "logs"
+
+# Module-specific log directories
+CODEFIX_LOG_DIR = Path(__file__).parent / "cypherfix_codefix" / "logs"
+TRIAGE_LOG_DIR = Path(__file__).parent / "cypherfix_triage" / "logs"
+
+# Module log config: (logger_name, log_dir, log_file_name)
+MODULE_LOGS = [
+    ("cypherfix_codefix", CODEFIX_LOG_DIR, "codefix.log"),
+    ("cypherfix_triage", TRIAGE_LOG_DIR, "triage.log"),
+]
 
 # Log file settings
 LOG_FILE_NAME = "agent.log"
@@ -78,10 +87,29 @@ def setup_logging(
         file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
 
+    # Module-specific file handlers (separate log files for CypherFix agents)
+    if log_to_file:
+        for module_name, log_dir, log_file in MODULE_LOGS:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            module_handler = RotatingFileHandler(
+                filename=str(log_dir / log_file),
+                maxBytes=LOG_MAX_BYTES,
+                backupCount=get_setting('LOG_BACKUP_COUNT', 5),
+                encoding="utf-8",
+            )
+            module_handler.setLevel(FILE_LOG_LEVEL)
+            module_handler.setFormatter(
+                logging.Formatter(FILE_LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+            )
+            module_logger = logging.getLogger(module_name)
+            module_logger.handlers.clear()  # Prevent duplicates on re-init
+            module_logger.addHandler(module_handler)
+
     # Reduce noise from third-party libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("anthropic").setLevel(logging.WARNING)
     logging.getLogger("langchain").setLevel(logging.INFO)
     logging.getLogger("langgraph").setLevel(logging.INFO)
     logging.getLogger("neo4j").setLevel(logging.WARNING)
@@ -94,6 +122,8 @@ def setup_logging(
     # Log startup message
     logger = logging.getLogger(__name__)
     logger.info(f"Logging configured - File: {LOG_DIR / LOG_FILE_NAME}")
+    for module_name, log_dir, log_file in MODULE_LOGS:
+        logger.info(f"  Module log: {module_name} -> {log_dir / log_file}")
     logger.info(f"Max file size: {LOG_MAX_BYTES / 1024 / 1024:.1f} MB, Backup count: {get_setting('LOG_BACKUP_COUNT', 5)}")
 
 

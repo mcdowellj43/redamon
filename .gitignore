@@ -106,6 +106,9 @@ gvm_scan/output/*.json
 # Log files
 *.log
 /logs/
+agentic/logs/
+agentic/cypherfix_codefix/logs/
+agentic/cypherfix_triage/logs/
 
 # OS generated files
 .DS_Store
@@ -127,6 +130,9 @@ docker-compose.override.yml
 # Private strategy docs
 LAUNCHPLAN.md
 GAP.md
+agentic/readmes/README.EMPOWER.md
+agentic/readmes/README.CYPHERFIX.md
+agentic/readmes/README.FULLFIX.md
 cai/
 
 # Claude Code config

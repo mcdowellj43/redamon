@@ -17,20 +17,8 @@ from .parsing import (
     parse_analysis_response,
 )
 
-from .phase import (
-    classify_attack_path,
-    determine_phase_for_new_objective,
-)
-
-from .exploit_writer import (
-    create_exploit_node,
-    close_driver as close_exploit_writer_driver,
-)
-
-from .debug import (
-    save_graph_image,
-)
-
+# config MUST be imported before phase/chain_graph_writer
+# to avoid circular import: phase -> prompts -> utils -> orchestrator_helpers.get_checkpointer
 from .config import (
     set_checkpointer,
     get_checkpointer,
@@ -39,6 +27,41 @@ from .config import (
     get_config_values,
     get_identifiers,
     is_session_config_complete,
+)
+
+from .phase import (
+    classify_attack_path,
+    determine_phase_for_new_objective,
+)
+
+from .chain_graph_writer import (
+    close_driver as close_chain_graph_driver,
+)
+
+from .debug import (
+    save_graph_image,
+)
+
+from .llm_setup import (
+    parse_model_provider,
+    setup_llm,
+    apply_project_settings,
+)
+
+from .streaming import (
+    detect_generated_file,
+    emit_streaming_events,
+)
+
+from .nodes import (
+    initialize_node,
+    think_node,
+    execute_tool_node,
+    generate_response_node,
+    await_approval_node,
+    process_approval_node,
+    await_question_node,
+    process_answer_node,
 )
 
 __all__ = [
@@ -51,14 +74,6 @@ __all__ = [
     "parse_llm_decision",
     "try_parse_llm_decision",
     "parse_analysis_response",
-    # phase
-    "classify_attack_path",
-    "determine_phase_for_new_objective",
-    # exploit_writer
-    "create_exploit_node",
-    "close_exploit_writer_driver",
-    # debug
-    "save_graph_image",
     # config
     "set_checkpointer",
     "get_checkpointer",
@@ -67,4 +82,27 @@ __all__ = [
     "get_config_values",
     "get_identifiers",
     "is_session_config_complete",
+    # phase
+    "classify_attack_path",
+    "determine_phase_for_new_objective",
+    # chain_graph_writer
+    "close_chain_graph_driver",
+    # debug
+    "save_graph_image",
+    # llm_setup
+    "parse_model_provider",
+    "setup_llm",
+    "apply_project_settings",
+    # streaming
+    "detect_generated_file",
+    "emit_streaming_events",
+    # nodes
+    "initialize_node",
+    "think_node",
+    "execute_tool_node",
+    "generate_response_node",
+    "await_approval_node",
+    "process_approval_node",
+    "await_question_node",
+    "process_answer_node",
 ]

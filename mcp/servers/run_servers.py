@@ -106,6 +106,12 @@ def run_server(name: str, config: dict, transport: str = "sse"):
                 module.start_progress_server(progress_port)
                 logger.info(f"Started metasploit progress server on port {progress_port}")
 
+            # Start progress server for network_recon (for Hydra live progress updates)
+            if name == "network_recon" and hasattr(module, 'start_hydra_progress_server'):
+                hydra_progress_port = int(os.getenv("HYDRA_PROGRESS_PORT", "8014"))
+                module.start_hydra_progress_server(hydra_progress_port)
+                logger.info(f"Started Hydra progress server on port {hydra_progress_port}")
+
             module.mcp.run(
                 transport="sse",
                 host="0.0.0.0",

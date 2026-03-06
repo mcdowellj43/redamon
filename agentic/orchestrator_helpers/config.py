@@ -159,7 +159,9 @@ def is_session_config_complete() -> Tuple[bool, List[str]]:
     Check if session configuration is complete for exploitation.
 
     Decision Logic:
-        IF LPORT is set (not None, > 0):
+        IF ngrok tunnel is enabled and reachable:
+            → LHOST/LPORT auto-detected from ngrok, config is complete
+        ELSE IF LPORT is set (not None, > 0):
             → Use REVERSE payload (target connects TO attacker)
             → Requires: LHOST + LPORT
         ELSE IF BIND_PORT_ON_TARGET is set:
@@ -173,6 +175,22 @@ def is_session_config_complete() -> Tuple[bool, List[str]]:
         - is_complete: True if all required params are set
         - missing_params_list: List of parameter names that are missing
     """
+    # Check ngrok tunnel first — if active, LHOST/LPORT are auto-detected
+    NGROK_TUNNEL_ENABLED = get_setting('NGROK_TUNNEL_ENABLED', False)
+    if NGROK_TUNNEL_ENABLED:
+        from utils import _query_ngrok_tunnel
+        tunnel_info = _query_ngrok_tunnel()
+        if tunnel_info:
+            return (True, [])
+
+    # Check chisel tunnel — if active, LHOST/LPORT are derived from VPS URL
+    CHISEL_TUNNEL_ENABLED = get_setting('CHISEL_TUNNEL_ENABLED', False)
+    if CHISEL_TUNNEL_ENABLED:
+        from utils import _query_chisel_tunnel
+        tunnel_info = _query_chisel_tunnel()
+        if tunnel_info:
+            return (True, [])
+
     LPORT = get_setting('LPORT')
     LHOST = get_setting('LHOST', '') or None
     BIND_PORT_ON_TARGET = get_setting('BIND_PORT_ON_TARGET', 4444)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { Drawer } from '@/components/ui'
 import { GraphNode } from '../../types'
 import { getNodeColor } from '../../utils'
@@ -16,17 +17,26 @@ interface NodeDrawerProps {
 
 export function NodeDrawer({ node, isOpen, onClose, onDeleteNode }: NodeDrawerProps) {
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true)
+  }
+
+  const handleDeleteConfirm = async () => {
     if (!node || !onDeleteNode) return
-    if (!confirm('Delete this Exploit node and all its connections?')) return
     setIsDeleting(true)
     try {
       await onDeleteNode(node.id)
+      setShowDeleteConfirm(false)
       onClose()
     } finally {
       setIsDeleting(false)
     }
+  }
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false)
   }
 
   // Filter out internal IDs and sort with timestamps at the bottom
@@ -58,12 +68,12 @@ export function NodeDrawer({ node, isOpen, onClose, onDeleteNode }: NodeDrawerPr
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
               <h3 className={styles.sectionTitleBasicInfo}>Basic Info</h3>
-              {(node.type === 'Exploit' || node.type === 'ExploitGvm') && onDeleteNode && (
+              {node.type !== 'Domain' && node.type !== 'Subdomain' && onDeleteNode && (
                 <button
                   className={styles.deleteButton}
-                  onClick={handleDelete}
+                  onClick={handleDeleteClick}
                   disabled={isDeleting}
-                  title="Delete exploit node"
+                  title="Delete node"
                 >
                   {isDeleting ? '...' : '\uD83D\uDDD1'}
                 </button>
@@ -102,6 +112,41 @@ export function NodeDrawer({ node, isOpen, onClose, onDeleteNode }: NodeDrawerPr
               <p className={styles.emptyProperties}>No additional properties</p>
             )}
           </div>
+
+          {/* Delete confirmation modal */}
+          {showDeleteConfirm && (
+            <div className={styles.confirmOverlay} onClick={handleDeleteCancel}>
+              <div className={styles.confirmModal} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.confirmIcon}>
+                  <AlertTriangle size={28} />
+                </div>
+                <h4 className={styles.confirmTitle}>Delete Node</h4>
+                <p className={styles.confirmText}>
+                  Deleting <strong>{node.type}: {node.name}</strong> will permanently remove
+                  this node and all its relationships from the graph.
+                </p>
+                <p className={styles.confirmWarning}>
+                  This may break the connectivity of the graph and affect
+                  the agent&apos;s ability to interpret the attack chain context.
+                </p>
+                <div className={styles.confirmActions}>
+                  <button
+                    className={styles.confirmCancelBtn}
+                    onClick={handleDeleteCancel}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className={styles.confirmDeleteBtn}
+                    onClick={handleDeleteConfirm}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </Drawer>

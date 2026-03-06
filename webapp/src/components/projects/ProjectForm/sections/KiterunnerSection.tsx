@@ -145,7 +145,7 @@ export function KiterunnerSection({ data, updateField }: KiterunnerSectionProps)
                   <input
                     type="text"
                     className="textInput"
-                    value={data.kiterunnerIgnoreStatus.join(', ')}
+                    value={(data.kiterunnerIgnoreStatus ?? []).join(', ')}
                     onChange={(e) => updateField('kiterunnerIgnoreStatus', e.target.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)))}
                     placeholder="(empty = use whitelist only)"
                   />
@@ -156,7 +156,7 @@ export function KiterunnerSection({ data, updateField }: KiterunnerSectionProps)
                   <input
                     type="text"
                     className="textInput"
-                    value={data.kiterunnerMatchStatus.join(', ')}
+                    value={(data.kiterunnerMatchStatus ?? []).join(', ')}
                     onChange={(e) => updateField('kiterunnerMatchStatus', e.target.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)))}
                     placeholder="200, 201, 204, 301, 302, 401, 403, 405"
                   />
@@ -170,7 +170,7 @@ export function KiterunnerSection({ data, updateField }: KiterunnerSectionProps)
                   <label className={styles.fieldLabel}>Request Headers</label>
                   <textarea
                     className="textarea"
-                    value={data.kiterunnerHeaders.join('\n')}
+                    value={(data.kiterunnerHeaders ?? []).join('\n')}
                     onChange={(e) => updateField('kiterunnerHeaders', e.target.value.split('\n').filter(Boolean))}
                     placeholder="Authorization: Bearer token123&#10;X-API-Key: key123"
                     rows={3}
@@ -213,7 +213,7 @@ export function KiterunnerSection({ data, updateField }: KiterunnerSectionProps)
                       <input
                         type="text"
                         className="textInput"
-                        value={data.kiterunnerBruteforceMethods.join(', ')}
+                        value={(data.kiterunnerBruteforceMethods ?? []).join(', ')}
                         onChange={(e) =>
                           updateField(
                             'kiterunnerBruteforceMethods',

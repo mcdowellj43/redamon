@@ -27,21 +27,27 @@ function getGraphFingerprint(data: GraphData | undefined): string {
 
 interface UseGraphDataOptions {
   isReconRunning?: boolean
+  isAgentRunning?: boolean
 }
 
 export function useGraphData(projectId: string | null, options?: UseGraphDataOptions) {
-  const { isReconRunning = false } = options || {}
+  const { isReconRunning = false, isAgentRunning = false } = options || {}
 
   // Keep track of the last stable data
   const stableDataRef = useRef<GraphData | undefined>(undefined)
   const lastFingerprintRef = useRef<string>('')
 
+  const shouldPoll = isReconRunning || isAgentRunning
+
   const query = useQuery({
     queryKey: ['graph', projectId],
     queryFn: () => fetchGraphData(projectId!),
     enabled: !!projectId,
-    // Poll every 5 seconds while recon is running
-    refetchInterval: isReconRunning ? 5000 : false,
+    // Poll every 5 seconds while recon or agent is running
+    refetchInterval: shouldPoll ? 5000 : false,
+    // Only re-render the component when data or error actually change
+    // (not on isFetching / dataUpdatedAt / fetchStatus transitions)
+    notifyOnChangeProps: ['data', 'error', 'isLoading'],
   })
 
   // Only update the stable data reference when the fingerprint changes

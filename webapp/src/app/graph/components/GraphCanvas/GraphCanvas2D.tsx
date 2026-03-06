@@ -1,16 +1,16 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { GraphData, GraphNode, GraphLink } from '../../types'
 import { getNodeColor, getNodeSize, getGlowLevel } from '../../utils'
-import { getLinkColor, getLinkWidth2D, getParticleWidth } from '../../utils/linkHelpers'
+import { getLinkColor, getLinkWidth2D, getParticleWidth, getParticleColor, getParticleCount, getParticleSpeed } from '../../utils/linkHelpers'
 import {
-  LINK_COLORS,
   LINK_SIZES,
   BASE_SIZES,
   BACKGROUND_COLORS,
   SELECTION_COLORS,
+  CHAIN_SESSION_COLORS,
   FORCE_CONFIG,
   ANIMATION_CONFIG,
   ZOOM_CONFIG,
@@ -30,6 +30,7 @@ interface GraphCanvas2DProps {
   selectedNode: GraphNode | null
   onNodeClick: (node: GraphNode) => void
   isDark?: boolean
+  activeChainId?: string
 }
 
 export function GraphCanvas2D({
@@ -40,13 +41,28 @@ export function GraphCanvas2D({
   selectedNode,
   onNodeClick,
   isDark = true,
+  activeChainId,
 }: GraphCanvas2DProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null)
   const animationTimeRef = useRef<number>(0)
+  const lastDataFingerprintRef = useRef<string>('')
 
-  // Set up collision detection
+  // Fingerprint the data so we only reheat when structure actually changes
+  const dataFingerprint = useMemo(() => {
+    const nodeIds = data.nodes.map(n => n.id).sort().join(',')
+    const linkIds = data.links.map(l => `${typeof l.source === 'object' ? (l.source as GraphNode).id : l.source}-${typeof l.target === 'object' ? (l.target as GraphNode).id : l.target}`).sort().join(',')
+    return `${data.nodes.length}:${data.links.length}:${nodeIds}:${linkIds}`
+  }, [data])
+
+  // Set up collision detection — only reheat when graph structure changes
   useEffect(() => {
+    const isFirstRender = lastDataFingerprintRef.current === ''
+    const structureChanged = dataFingerprint !== lastDataFingerprintRef.current
+    lastDataFingerprintRef.current = dataFingerprint
+
+    if (!structureChanged) return
+
     const timer = setTimeout(() => {
       const fg = graphRef.current
       if (!fg) return
@@ -60,11 +76,14 @@ export function GraphCanvas2D({
           .strength(FORCE_CONFIG.collisionStrength)
           .iterations(FORCE_CONFIG.collisionIterations)
       )
-      fg.d3ReheatSimulation()
+      // Only reheat on first render or when nodes/links actually changed
+      if (isFirstRender || structureChanged) {
+        fg.d3ReheatSimulation()
+      }
     }, ANIMATION_CONFIG.initDelay)
 
     return () => clearTimeout(timer)
-  }, [data])
+  }, [dataFingerprint])
 
   // Animation loop for pulsing glow effect
   const hasHighSeverity = hasHighSeverityNodes(data.nodes)
@@ -96,9 +115,10 @@ export function GraphCanvas2D({
       linkColor={(link) => getLinkColor(link as GraphLink, selectedNodeId)}
       linkDirectionalArrowColor={(link) => getLinkColor(link as GraphLink, selectedNodeId)}
       linkWidth={(link) => getLinkWidth2D(link as GraphLink, selectedNodeId)}
-      linkDirectionalParticles={LINK_SIZES.particleCount}
+      linkDirectionalParticles={(link) => getParticleCount(link as GraphLink, selectedNodeId)}
       linkDirectionalParticleWidth={(link) => getParticleWidth(link as GraphLink, selectedNodeId)}
-      linkDirectionalParticleColor={() => LINK_COLORS.particle}
+      linkDirectionalParticleColor={(link) => getParticleColor(link as GraphLink)}
+      linkDirectionalParticleSpeed={(link) => getParticleSpeed(link as GraphLink)}
       linkDirectionalArrowLength={LINK_SIZES.arrowLength}
       linkDirectionalArrowRelPos={1}
       backgroundColor={isDark ? BACKGROUND_COLORS.dark.graph : BACKGROUND_COLORS.light.graph}
@@ -115,9 +135,32 @@ export function GraphCanvas2D({
         const color = getNodeColor(graphNode)
         const isSelected = selectedNodeId === graphNode.id
 
+        const isChainNode = graphNode.type === 'AttackChain' || graphNode.type === 'ChainStep' || graphNode.type === 'ChainDecision' || graphNode.type === 'ChainFailure'
+        const isInActiveChain = isChainNode && !!activeChainId && graphNode.properties?.chain_id === activeChainId
+        const isActiveChain = graphNode.type === 'AttackChain' && isInActiveChain
+        const isExploit = graphNode.type === 'ExploitGvm' || graphNode.type === 'ChainFinding'
+        const isExploitInActiveChain = isExploit && !!activeChainId && graphNode.properties?.chain_id === activeChainId
+        // Inactive chain nodes: grey by default, orange when selected
+        const effectiveColor = (isChainNode || isExploit) && !isInActiveChain && !isExploitInActiveChain
+          ? (isSelected ? CHAIN_SESSION_COLORS.inactiveSelected : CHAIN_SESSION_COLORS.inactive)
+          : color
+
+        // Helper: draw hexagon path centered at (cx, cy) with given radius
+        const drawHexagon = (cx: number, cy: number, r: number) => {
+          ctx.beginPath()
+          for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI / 3) * i - Math.PI / 2
+            const px = cx + r * Math.cos(angle)
+            const py = cy + r * Math.sin(angle)
+            if (i === 0) ctx.moveTo(px, py)
+            else ctx.lineTo(px, py)
+          }
+          ctx.closePath()
+        }
+
         // Draw selection marker (outer ring) for selected node
         if (isSelected) {
-          if (graphNode.type === 'Exploit' || graphNode.type === 'ExploitGvm') {
+          if (graphNode.type === 'ExploitGvm' || graphNode.type === 'ChainFinding') {
             // Diamond selection ring
             const sd = nodeSize * 1.2 + 6
             ctx.beginPath()
@@ -126,6 +169,12 @@ export function GraphCanvas2D({
             ctx.lineTo(graphNode.x, graphNode.y + sd)
             ctx.lineTo(graphNode.x - sd, graphNode.y)
             ctx.closePath()
+            ctx.strokeStyle = SELECTION_COLORS.ring
+            ctx.lineWidth = 3
+            ctx.stroke()
+          } else if (isChainNode) {
+            // Hexagon selection ring
+            drawHexagon(graphNode.x, graphNode.y, nodeSize * 1.2 + 6)
             ctx.strokeStyle = SELECTION_COLORS.ring
             ctx.lineWidth = 3
             ctx.stroke()
@@ -138,10 +187,28 @@ export function GraphCanvas2D({
           }
         }
 
+        // Draw active-session marker on the matching AttackChain node
+        if (isActiveChain) {
+          const time = animationTimeRef.current || Date.now() / 1000
+          const pulse = Math.sin(time * 3) * 0.5 + 0.5
+          const ringRadius = nodeSize * 1.2 + 8 + pulse * 3
+          ctx.save()
+          ctx.setLineDash([4, 4])
+          ctx.lineDashOffset = -time * 20 // rotating dash
+          drawHexagon(graphNode.x, graphNode.y, ringRadius)
+          ctx.strokeStyle = `rgba(250, 204, 21, ${0.7 + pulse * 0.3})` // yellow
+          ctx.lineWidth = 2
+          ctx.stroke()
+          ctx.setLineDash([])
+          ctx.restore()
+        }
+
         // Check if this is a high/critical severity vulnerability or CVE
         const glowLevel = getGlowLevel(graphNode)
 
         // Draw pulsing glow effect for high/critical severity
+        // Use effectiveColor so inactive chain nodes glow grey instead of amber
+        const glowColor = (isChainNode || isExploit) ? effectiveColor : color
         if (glowLevel) {
           const time = animationTimeRef.current || Date.now() / 1000
           const speed = glowLevel === 'critical' ? ANIMATION_CONFIG.criticalSpeed : ANIMATION_CONFIG.highSpeed
@@ -156,9 +223,9 @@ export function GraphCanvas2D({
             graphNode.y,
             glowRadius
           )
-          gradient.addColorStop(0, color)
-          gradient.addColorStop(0.5, `${color}88`)
-          gradient.addColorStop(1, `${color}00`)
+          gradient.addColorStop(0, glowColor)
+          gradient.addColorStop(0.5, `${glowColor}88`)
+          gradient.addColorStop(1, `${glowColor}00`)
 
           ctx.beginPath()
           ctx.arc(graphNode.x, graphNode.y, glowRadius, 0, 2 * Math.PI)
@@ -167,7 +234,6 @@ export function GraphCanvas2D({
         }
 
         // Draw main shape
-        const isExploit = graphNode.type === 'Exploit' || graphNode.type === 'ExploitGvm'
         if (isExploit) {
           // Diamond shape for Exploit nodes (rotated square)
           const d = nodeSize * 1.2 // diamond half-diagonal
@@ -177,9 +243,9 @@ export function GraphCanvas2D({
           ctx.lineTo(graphNode.x, graphNode.y + d)       // bottom
           ctx.lineTo(graphNode.x - d, graphNode.y)       // left
           ctx.closePath()
-          ctx.fillStyle = color.replace(')', ', 0.12)').replace('rgb(', 'rgba(')
+          ctx.fillStyle = effectiveColor.replace(')', ', 0.12)').replace('rgb(', 'rgba(')
           ctx.fill()
-          ctx.strokeStyle = color
+          ctx.strokeStyle = effectiveColor
           ctx.lineWidth = 1.5
           ctx.stroke()
 
@@ -188,8 +254,17 @@ export function GraphCanvas2D({
           ctx.font = `${iconSize}px Sans-Serif`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
-          ctx.fillStyle = color
+          ctx.fillStyle = effectiveColor
           ctx.fillText('\u26A1', graphNode.x, graphNode.y)
+        } else if (isChainNode) {
+          // Hexagon shape for attack chain nodes
+          const r = nodeSize * 1.1
+          drawHexagon(graphNode.x, graphNode.y, r)
+          ctx.fillStyle = effectiveColor.replace(')', ', 0.15)').replace('rgb(', 'rgba(')
+          ctx.fill()
+          ctx.strokeStyle = effectiveColor
+          ctx.lineWidth = 1.5
+          ctx.stroke()
         } else {
           // Standard circle for all other nodes
           ctx.beginPath()
@@ -205,7 +280,7 @@ export function GraphCanvas2D({
           ctx.font = `${fontSize}px Sans-Serif`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'top'
-          ctx.fillStyle = '#ffffff'
+          ctx.fillStyle = isDark ? BACKGROUND_COLORS.dark.label : BACKGROUND_COLORS.light.label
           ctx.fillText(label, graphNode.x, graphNode.y + nodeSize + 2)
         }
       }}

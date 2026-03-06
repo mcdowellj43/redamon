@@ -32,10 +32,17 @@ ApprovalDecision = Literal["approve", "modify", "abort"]
 QuestionFormat = Literal["text", "single_choice", "multi_choice"]
 
 # Attack path types for dynamic routing
-AttackPathType = Literal[
-    "cve_exploit",                  # CVE-based exploitation (default)
-    "brute_force_credential_guess", # Brute force / credential attacks
-]
+# Known types: "cve_exploit", "brute_force_credential_guess", "phishing_social_engineering"
+# Unclassified types: "<descriptive_term>-unclassified" (e.g., "sql_injection-unclassified")
+AttackPathType = str  # Validated by AttackPathClassification.attack_path_type validator
+
+KNOWN_ATTACK_PATHS = {"cve_exploit", "brute_force_credential_guess", "phishing_social_engineering"}
+_UNCLASSIFIED_RE = re.compile(r'^[a-z][a-z0-9_]*-unclassified$')
+
+
+def is_unclassified_path(attack_path_type: str) -> bool:
+    """Check if an attack path type is an unclassified fallback."""
+    return attack_path_type.endswith("-unclassified")
 
 
 # =============================================================================
@@ -229,6 +236,17 @@ class ExtractedTargetInfo(BaseModel):
     sessions: List[int] = Field(default_factory=list)
 
 
+class ChainFindingExtract(BaseModel):
+    """Single finding extracted by LLM from tool output for attack chain graph."""
+    finding_type: str = "custom"  # vulnerability_confirmed, credential_found, exploit_success, etc.
+    severity: str = "info"        # critical, high, medium, low, info
+    title: str = ""
+    evidence: str = ""
+    related_cves: List[str] = Field(default_factory=list)
+    related_ips: List[str] = Field(default_factory=list)
+    confidence: int = 80
+
+
 class OutputAnalysisInline(BaseModel):
     """Inline output analysis embedded in LLMDecision when tool output is pending."""
     interpretation: str = ""
@@ -237,6 +255,7 @@ class OutputAnalysisInline(BaseModel):
     recommended_next_steps: List[str] = Field(default_factory=list)
     exploit_succeeded: bool = False
     exploit_details: Optional[dict] = None
+    chain_findings: List[ChainFindingExtract] = Field(default_factory=list)
 
 
 class LLMDecision(BaseModel):
@@ -297,8 +316,8 @@ class AttackPathClassification(BaseModel):
         default="informational",
         description="Required phase for this request: 'informational' for recon, 'exploitation' for attacks"
     )
-    attack_path_type: AttackPathType = Field(
-        description="The classified attack path type based on user intent (only used for exploitation phase)"
+    attack_path_type: str = Field(
+        description="The classified attack path type: 'cve_exploit', 'brute_force_credential_guess', or '<term>-unclassified'"
     )
     secondary_attack_path: Optional[str] = Field(
         default=None,
@@ -315,6 +334,30 @@ class AttackPathClassification(BaseModel):
         default=None,
         description="Specific service detected (ssh, mysql, etc.) for brute_force_credential_guess paths"
     )
+    target_host: Optional[str] = Field(
+        default=None,
+        description="IP or hostname extracted from objective (for graph linking)"
+    )
+    target_port: Optional[int] = Field(
+        default=None,
+        description="Port number extracted from objective (for graph linking)"
+    )
+    target_cves: List[str] = Field(
+        default_factory=list,
+        description="CVE IDs extracted from objective (for graph linking)"
+    )
+
+    @field_validator('attack_path_type')
+    @classmethod
+    def validate_attack_path_type(cls, v: str) -> str:
+        if v in KNOWN_ATTACK_PATHS:
+            return v
+        if _UNCLASSIFIED_RE.match(v):
+            return v
+        raise ValueError(
+            f"attack_path_type must be 'cve_exploit', 'brute_force_credential_guess', "
+            f"'phishing_social_engineering', or match '<term>-unclassified' pattern. Got: '{v}'"
+        )
 
 
 # =============================================================================
@@ -383,6 +426,20 @@ class AgentState(TypedDict):
     _tool_result: Optional[dict]  # Result from tool execution
     _just_transitioned_to: Optional[str]  # Phase we just transitioned to (prevents re-requesting)
     _abort_transition: bool  # True when user aborted a phase transition (routes to generate_response)
+
+    # Attack Chain memory (structured LLM context, populated alongside graph writes)
+    chain_findings_memory: List[dict]    # Accumulated findings for this session
+    chain_failures_memory: List[dict]    # Accumulated failures for this session
+    chain_decisions_memory: List[dict]   # Accumulated decisions for this session
+
+    # Internal: previous step ID for NEXT_STEP linking in chain graph
+    _last_chain_step_id: Optional[str]
+
+    # Internal: prior chain context string (loaded once at session init)
+    _prior_chain_context: Optional[str]
+
+    # Response tier for adaptive formatting ("conversational", "summary", "full_report")
+    _response_tier: Optional[str]
 
     # Metasploit state tracking
     msf_session_reset_done: bool  # True if metasploit was reset at start of this session
@@ -491,6 +548,13 @@ def create_initial_state(
         "_tool_result": None,
         "_just_transitioned_to": None,
         "_abort_transition": False,
+        # Attack Chain memory
+        "chain_findings_memory": [],
+        "chain_failures_memory": [],
+        "chain_decisions_memory": [],
+        "_last_chain_step_id": None,
+        "_prior_chain_context": None,
+        "_response_tier": None,
         # Metasploit state
         "msf_session_reset_done": False,
     }
@@ -726,6 +790,154 @@ def format_objective_history(objective_history: List[dict]) -> str:
         session_count = len(findings.get("sessions", []))
 
         lines.append(f"   Findings: {vuln_count} vulns, {port_count} ports, {session_count} sessions")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_chain_context(
+    chain_findings: List[dict],
+    chain_failures: List[dict],
+    chain_decisions: List[dict],
+    execution_trace: List[dict],
+    recent_count: int = 5,
+) -> str:
+    """Format attack chain memory for the LLM system prompt.
+
+    Replaces ``format_execution_trace()`` as the primary context injected
+    into the think node.  Puts findings/failures/decisions up front so
+    the LLM gets instant signal, followed by only the last *recent_count*
+    steps in compact form.  Scales O(findings+failures+decisions+N).
+    """
+    if not execution_trace and not chain_findings and not chain_failures:
+        return "No steps executed yet."
+
+    lines: list[str] = []
+
+    # ── Findings ────────────────────────────────────────
+    if chain_findings:
+        lines.append("── Findings ──────────────────────────────────────")
+        for f in chain_findings:
+            sev = (f.get("severity") or "info").upper()
+            ftype = f.get("finding_type") or "custom"
+            title = f.get("title") or ftype
+            step = f.get("step_iteration", "?")
+            lines.append(f"  [{sev}] {title} (step {step})")
+        lines.append("")
+
+    # ── Failed Attempts ─────────────────────────────────
+    if chain_failures:
+        lines.append("── Failed Attempts ───────────────────────────────")
+        for fl in chain_failures:
+            step = fl.get("step_iteration", "?")
+            ftype = fl.get("failure_type") or "error"
+            err = fl.get("error_message") or ""
+            lesson = fl.get("lesson_learned") or ""
+            lines.append(f"  [step {step}] {ftype}: {err[:200]}")
+            if lesson:
+                lines.append(f"           Lesson: {lesson[:200]}")
+        lines.append("")
+
+    # ── Decisions ───────────────────────────────────────
+    if chain_decisions:
+        lines.append("── Decisions ─────────────────────────────────────")
+        for d in chain_decisions:
+            step = d.get("step_iteration", "?")
+            dtype = d.get("decision_type") or "decision"
+            from_s = d.get("from_state") or "?"
+            to_s = d.get("to_state") or "?"
+            approved = "approved" if d.get("approved") else "rejected"
+            by = d.get("made_by") or "user"
+            lines.append(f"  [step {step}] {dtype}: {from_s} → {to_s} ({by} {approved})")
+        lines.append("")
+
+    # ── Recent Steps (last N) ───────────────────────────
+    if execution_trace:
+        recent = execution_trace[-recent_count:]
+        if len(execution_trace) > recent_count:
+            lines.append(f"── Recent Steps (last {recent_count} of {len(execution_trace)}) ──")
+        else:
+            lines.append(f"── Steps ({len(execution_trace)} total) ──────────────────")
+
+        for step in recent:
+            it = step.get("iteration", "?")
+            phase = step.get("phase", "?")
+            tool = step.get("tool_name") or "none"
+            args = step.get("tool_args") or {}
+            success = step.get("success", True)
+            err = step.get("error_message") or ""
+            thought = step.get("thought", "")
+            output = step.get("tool_output", "")
+            analysis = step.get("output_analysis", "")
+
+            # Compact header
+            lines.append(f"  Step {it} [{phase}]: {tool}")
+            # Thought (truncated)
+            if thought:
+                lines.append(f"    Thought: {thought[:500]}")
+            # Args (truncated)
+            if args and tool != "none":
+                args_str = str(args)
+                lines.append(f"    Args: {args_str[:300]}")
+            # Result line
+            if success:
+                out_preview = (analysis or output or "")[:500]
+                if out_preview:
+                    lines.append(f"    OK | {out_preview}")
+                else:
+                    lines.append(f"    OK")
+            else:
+                lines.append(f"    FAILED | {err[:300]}")
+            # Full output for the very last step (most relevant)
+            if step is recent[-1] and output:
+                max_out = 5000
+                if len(output) > max_out:
+                    lines.append(f"    Output (last step, truncated):\n{output[:max_out]}...")
+                else:
+                    lines.append(f"    Output (last step):\n{output}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_prior_chains(prior_chains: List[dict]) -> str:
+    """Format prior attack chain summaries for system prompt injection.
+
+    Called once at session init to give the agent cross-session memory.
+    """
+    if not prior_chains:
+        return "No prior sessions."
+
+    lines = ["### Prior Attack Chain History", ""]
+    for chain in prior_chains:
+        title = chain.get("title") or "Untitled"
+        status = chain.get("status") or "unknown"
+        total = chain.get("total_steps") or 0
+        ok = chain.get("successful_steps") or 0
+        fail = chain.get("failed_steps") or 0
+        outcome = chain.get("final_outcome") or ""
+        phases = chain.get("phases_reached") or []
+        atype = chain.get("attack_path_type") or ""
+
+        lines.append(f"**{title}** [{status}] ({atype})")
+        lines.append(f"  Steps: {total} total, {ok} OK, {fail} failed | Phases: {', '.join(phases) if phases else 'none'}")
+        if outcome:
+            lines.append(f"  Outcome: {outcome[:300]}")
+
+        # Key findings
+        findings = chain.get("findings") or []
+        if findings:
+            for f in findings[:5]:
+                if f and f.get("title"):
+                    lines.append(f"  • [{f.get('severity', 'info').upper()}] {f['title']}")
+
+        # Key lessons from failures
+        failures = chain.get("failures") or []
+        if failures:
+            for fl in failures[:3]:
+                if fl and fl.get("lesson"):
+                    lines.append(f"  ⚠ Lesson: {fl['lesson'][:200]}")
+
         lines.append("")
 
     return "\n".join(lines)

@@ -32,3 +32,12 @@ httpx>=0.27.0
 
 # Async support
 anyio>=4.0.0
+
+# CypherFix CodeFix agent
+PyGithub>=2.1.0
+gitpython>=3.1.0
+
+# Tree-sitter navigation tools (symbols, find_definition, find_references, repo_map)
+tree-sitter==0.21.3
+tree-sitter-languages==1.8.0
+networkx>=3.0

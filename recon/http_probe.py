@@ -430,7 +430,7 @@ def build_targets_from_naabu(recon_data: dict) -> List[str]:
     naabu_data = recon_data.get("port_scan", {})
 
     # Common HTTPS ports
-    https_ports = {443, 8443, 4443, 9443, 8843, 443, 8080}
+    https_ports = {443, 8443, 4443, 9443, 8843}
     # Common HTTP ports
     http_ports = {80, 8080, 8000, 8888, 8008, 3000, 5000, 9000}
 
@@ -472,26 +472,53 @@ def build_targets_from_dns(recon_data: dict) -> List[str]:
     """
     Fallback: Build URLs from DNS data when naabu results are not available.
 
+    Probes default ports (80, 443) plus common non-standard HTTP ports
+    that firewalls/rate-limiting may cause naabu to miss.
+
     Returns:
-        List of URLs using default ports (80, 443)
+        List of URLs to probe
     """
     urls = []
     dns_data = recon_data.get("dns", {})
+
+    # Common non-standard HTTP ports to try when port scan has no results
+    extra_http_ports = [8080, 8000, 8888, 3000, 5000, 9000]
+    extra_https_ports = [8443, 4443, 9443]
+
+    def _add_host(host: str) -> None:
+        urls.append(f"http://{host}")
+        urls.append(f"https://{host}")
+        for port in extra_http_ports:
+            urls.append(f"http://{host}:{port}")
+        for port in extra_https_ports:
+            urls.append(f"https://{host}:{port}")
 
     # Add root domain
     domain = recon_data.get("domain", "")
     if domain:
         domain_dns = dns_data.get("domain", {})
         if domain_dns.get("ips", {}).get("ipv4") or domain_dns.get("ips", {}).get("ipv6"):
-            urls.append(f"http://{domain}")
-            urls.append(f"https://{domain}")
+            _add_host(domain)
 
     # Add subdomains
+    metadata = recon_data.get("metadata", {})
+    ip_mode = metadata.get("ip_mode", False)
     subdomains_dns = dns_data.get("subdomains", {})
     for subdomain, sub_data in subdomains_dns.items():
         if sub_data.get("has_records", False):
-            urls.append(f"http://{subdomain}")
-            urls.append(f"https://{subdomain}")
+            if ip_mode and sub_data.get("is_mock", False):
+                # In IP mode, mock subdomain names aren't valid hostnames.
+                # Use the actual IP address instead.
+                actual_ip = sub_data.get("actual_ip", "")
+                if actual_ip:
+                    _add_host(actual_ip)
+                    continue
+                # Fallback: extract IPs from dns data
+                ips = sub_data.get("ips", {})
+                for ip in (ips.get("ipv4", []) or []) + (ips.get("ipv6", []) or []):
+                    _add_host(ip)
+            else:
+                _add_host(subdomain)
 
     return urls
 
@@ -733,13 +760,17 @@ def parse_httpx_output(output_file: str, root_domain: str = None, allowed_hosts:
 
             # Extract host from URL
             host = extract_host_from_url(url)
-            
+
             # Filter URLs outside target scope
             # In filtered mode: only allow specific hosts from SUBDOMAIN_LIST
             # In full discovery mode: allow any host within root_domain scope
+            # Also check the original input URL host (httpx may follow redirects to a different host)
             if root_domain and not is_host_in_scope(host, root_domain, allowed_hosts):
-                filtered_count += 1
-                continue
+                input_url = entry.get("input", "")
+                input_host = extract_host_from_url(input_url) if input_url else ""
+                if not input_host or not is_host_in_scope(input_host, root_domain, allowed_hosts):
+                    filtered_count += 1
+                    continue
 
             # Status code tracking
             status_code = entry.get("status_code") or entry.get("status-code")
@@ -910,22 +941,24 @@ def is_host_in_scope(host: str, root_domain: str, allowed_hosts: list = None) ->
     """
     if not host or not root_domain:
         return False
-    
+
     host = host.lower().strip()
     root_domain = root_domain.lower().strip()
-    
-    # First, check if host is even within the root domain scope
-    in_root_scope = (host == root_domain or host.endswith(f".{root_domain}"))
-    if not in_root_scope:
-        return False
-    
-    # If allowed_hosts is specified (filtered mode), check against that list
+
+    # If allowed_hosts is specified (filtered mode), check against that list first.
+    # This must come before the root_domain scope check because in IP-mode the
+    # root_domain is a fake placeholder that real hostnames will never match.
     if allowed_hosts:
         allowed_set = {h.lower().strip() for h in allowed_hosts}
         return host in allowed_set
-    
-    # Full discovery mode - allow any host within root domain scope
-    return True
+
+    # IP addresses bypass domain scope check
+    if is_ip(host):
+        return True
+
+    # Check if host is within the root domain scope
+    in_root_scope = (host == root_domain or host.endswith(f".{root_domain}"))
+    return in_root_scope
 
 
 def is_ip(value: str) -> bool:
@@ -1391,7 +1424,12 @@ def run_http_probe(recon_data: dict, output_file: Path = None, settings: dict = 
     # Prefer naabu results, fallback to DNS
     if recon_data.get("port_scan"):
         urls = build_targets_from_naabu(recon_data)
-        print(f"    [*] Built {len(urls)} URLs from Naabu port scan results")
+        # build_targets_from_naabu falls back to DNS internally if no ports found
+        has_ports = bool(recon_data["port_scan"].get("by_host"))
+        if has_ports:
+            print(f"    [*] Built {len(urls)} URLs from Naabu port scan results")
+        else:
+            print(f"    [*] Built {len(urls)} URLs from DNS fallback (Naabu found no open ports)")
     else:
         urls = build_targets_from_dns(recon_data)
         print(f"    [*] Built {len(urls)} URLs from DNS data (no Naabu results)")

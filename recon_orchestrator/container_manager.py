@@ -91,7 +91,9 @@ class ContainerManager:
             if state.container_id:
                 try:
                     container = self.client.containers.get(state.container_id)
-                    if container.status != "running":
+                    if container.status == "paused":
+                        state.status = ReconStatus.PAUSED
+                    elif container.status != "running":
                         # Container stopped - check exit code
                         exit_code = container.attrs.get("State", {}).get("ExitCode", -1)
                         if exit_code == 0:
@@ -121,10 +123,10 @@ class ContainerManager:
         container_name = self._get_container_name(project_id)
         try:
             container = self.client.containers.get(container_name)
-            if container.status == "running":
+            if container.status in ("running", "paused"):
                 return ReconState(
                     project_id=project_id,
-                    status=ReconStatus.RUNNING,
+                    status=ReconStatus.PAUSED if container.status == "paused" else ReconStatus.RUNNING,
                     container_id=container.id,
                 )
         except NotFound:
@@ -140,14 +142,14 @@ class ContainerManager:
         project_id: str,
         user_id: str,
         webapp_api_url: str,
-        recon_path: str = "/home/samuele/Progetti didattici/RedAmon/recon",
+        recon_path: str,
     ) -> ReconState:
         """Start a recon container for a project"""
 
-        # Check if already running
+        # Check if already running or paused
         current_state = await self.get_status(project_id)
-        if current_state.status == ReconStatus.RUNNING:
-            raise ValueError(f"Recon already running for project {project_id}")
+        if current_state.status in (ReconStatus.RUNNING, ReconStatus.PAUSED):
+            raise ValueError(f"Recon already active for project {project_id}")
 
         # Clean up any existing container
         container_name = self._get_container_name(project_id)
@@ -247,8 +249,11 @@ class ContainerManager:
                             container_name = container.name
                             container_status = container.status
 
-                            # Stop if running
-                            if container_status == "running":
+                            # Stop if running or paused
+                            if container_status in ("running", "paused"):
+                                if container_status == "paused":
+                                    logger.info(f"Unpausing sub-container before stop: {container_name} ({sub_image})")
+                                    container.unpause()
                                 logger.info(f"Stopping sub-container: {container_name} ({sub_image})")
                                 container.stop(timeout=5)
 
@@ -266,11 +271,57 @@ class ContainerManager:
 
         return cleaned
 
+    async def pause_recon(self, project_id: str) -> ReconState:
+        """Pause a running recon process using Docker cgroups freeze"""
+        state = await self.get_status(project_id)
+
+        if state.status != ReconStatus.RUNNING:
+            return state
+
+        if state.container_id:
+            try:
+                container = self.client.containers.get(state.container_id)
+                container.pause()
+                state.status = ReconStatus.PAUSED
+                self.running_states[project_id] = state
+                logger.info(f"Paused recon container for project {project_id}")
+            except NotFound:
+                state.status = ReconStatus.ERROR
+                state.error = "Container not found"
+            except APIError as e:
+                state.status = ReconStatus.ERROR
+                state.error = f"Failed to pause: {e}"
+
+        return state
+
+    async def resume_recon(self, project_id: str) -> ReconState:
+        """Resume a paused recon process"""
+        state = await self.get_status(project_id)
+
+        if state.status != ReconStatus.PAUSED:
+            return state
+
+        if state.container_id:
+            try:
+                container = self.client.containers.get(state.container_id)
+                container.unpause()
+                state.status = ReconStatus.RUNNING
+                self.running_states[project_id] = state
+                logger.info(f"Resumed recon container for project {project_id}")
+            except NotFound:
+                state.status = ReconStatus.ERROR
+                state.error = "Container not found"
+            except APIError as e:
+                state.status = ReconStatus.ERROR
+                state.error = f"Failed to resume: {e}"
+
+        return state
+
     async def stop_recon(self, project_id: str, timeout: int = 10) -> ReconState:
         """Stop a running recon process"""
         state = await self.get_status(project_id)
 
-        if state.status != ReconStatus.RUNNING:
+        if state.status not in (ReconStatus.RUNNING, ReconStatus.PAUSED):
             return state
 
         state.status = ReconStatus.STOPPING
@@ -278,6 +329,9 @@ class ContainerManager:
         if state.container_id:
             try:
                 container = self.client.containers.get(state.container_id)
+                # Unpause before stopping for Docker version compatibility
+                if container.status == "paused":
+                    container.unpause()
                 container.stop(timeout=timeout)
                 container.remove()
                 state.status = ReconStatus.IDLE
@@ -374,7 +428,7 @@ class ContainerManager:
                         # Check if container is still running
                         try:
                             container.reload()
-                            if container.status != "running":
+                            if container.status not in ("running", "paused"):
                                 break
                         except Exception:
                             break
@@ -439,10 +493,10 @@ class ContainerManager:
                         yield event
 
                 except asyncio.TimeoutError:
-                    # Check if container is still running
+                    # Check if container is still running or paused
                     try:
                         container.reload()
-                        if container.status != "running":
+                        if container.status not in ("running", "paused"):
                             break
                     except Exception:
                         break
@@ -499,7 +553,9 @@ class ContainerManager:
             if state.container_id:
                 try:
                     container = self.client.containers.get(state.container_id)
-                    if container.status != "running":
+                    if container.status == "paused":
+                        state.status = GvmStatus.PAUSED
+                    elif container.status != "running":
                         exit_code = container.attrs.get("State", {}).get("ExitCode", -1)
                         if exit_code == 0:
                             state.status = GvmStatus.COMPLETED
@@ -525,10 +581,10 @@ class ContainerManager:
         container_name = self._get_gvm_container_name(project_id)
         try:
             container = self.client.containers.get(container_name)
-            if container.status == "running":
+            if container.status in ("running", "paused"):
                 return GvmState(
                     project_id=project_id,
-                    status=GvmStatus.RUNNING,
+                    status=GvmStatus.PAUSED if container.status == "paused" else GvmStatus.RUNNING,
                     container_id=container.id,
                 )
         except NotFound:
@@ -549,10 +605,10 @@ class ContainerManager:
     ) -> GvmState:
         """Start a GVM vulnerability scanner container for a project"""
 
-        # Check if already running
+        # Check if already running or paused
         current_state = await self.get_gvm_status(project_id)
-        if current_state.status == GvmStatus.RUNNING:
-            raise ValueError(f"GVM scan already running for project {project_id}")
+        if current_state.status in (GvmStatus.RUNNING, GvmStatus.PAUSED):
+            raise ValueError(f"GVM scan already active for project {project_id}")
 
         # Clean up any existing container
         container_name = self._get_gvm_container_name(project_id)
@@ -630,11 +686,57 @@ class ContainerManager:
 
         return state
 
+    async def pause_gvm_scan(self, project_id: str) -> GvmState:
+        """Pause a running GVM scan process"""
+        state = await self.get_gvm_status(project_id)
+
+        if state.status != GvmStatus.RUNNING:
+            return state
+
+        if state.container_id:
+            try:
+                container = self.client.containers.get(state.container_id)
+                container.pause()
+                state.status = GvmStatus.PAUSED
+                self.gvm_states[project_id] = state
+                logger.info(f"Paused GVM container for project {project_id}")
+            except NotFound:
+                state.status = GvmStatus.ERROR
+                state.error = "Container not found"
+            except APIError as e:
+                state.status = GvmStatus.ERROR
+                state.error = f"Failed to pause: {e}"
+
+        return state
+
+    async def resume_gvm_scan(self, project_id: str) -> GvmState:
+        """Resume a paused GVM scan process"""
+        state = await self.get_gvm_status(project_id)
+
+        if state.status != GvmStatus.PAUSED:
+            return state
+
+        if state.container_id:
+            try:
+                container = self.client.containers.get(state.container_id)
+                container.unpause()
+                state.status = GvmStatus.RUNNING
+                self.gvm_states[project_id] = state
+                logger.info(f"Resumed GVM container for project {project_id}")
+            except NotFound:
+                state.status = GvmStatus.ERROR
+                state.error = "Container not found"
+            except APIError as e:
+                state.status = GvmStatus.ERROR
+                state.error = f"Failed to resume: {e}"
+
+        return state
+
     async def stop_gvm_scan(self, project_id: str, timeout: int = 10) -> GvmState:
         """Stop a running GVM scan process"""
         state = await self.get_gvm_status(project_id)
 
-        if state.status != GvmStatus.RUNNING:
+        if state.status not in (GvmStatus.RUNNING, GvmStatus.PAUSED):
             return state
 
         state.status = GvmStatus.STOPPING
@@ -642,6 +744,8 @@ class ContainerManager:
         if state.container_id:
             try:
                 container = self.client.containers.get(state.container_id)
+                if container.status == "paused":
+                    container.unpause()
                 container.stop(timeout=timeout)
                 container.remove()
                 state.status = GvmStatus.IDLE
@@ -726,7 +830,7 @@ class ContainerManager:
                         ).result(timeout=5)
                         try:
                             container.reload()
-                            if container.status != "running":
+                            if container.status not in ("running", "paused"):
                                 break
                         except Exception:
                             break
@@ -785,7 +889,7 @@ class ContainerManager:
                 except asyncio.TimeoutError:
                     try:
                         container.reload()
-                        if container.status != "running":
+                        if container.status not in ("running", "paused"):
                             break
                     except Exception:
                         break
@@ -824,7 +928,9 @@ class ContainerManager:
             if state.container_id:
                 try:
                     container = self.client.containers.get(state.container_id)
-                    if container.status != "running":
+                    if container.status == "paused":
+                        state.status = GithubHuntStatus.PAUSED
+                    elif container.status != "running":
                         exit_code = container.attrs.get("State", {}).get("ExitCode", -1)
                         if exit_code == 0:
                             state.status = GithubHuntStatus.COMPLETED
@@ -850,10 +956,10 @@ class ContainerManager:
         container_name = self._get_github_hunt_container_name(project_id)
         try:
             container = self.client.containers.get(container_name)
-            if container.status == "running":
+            if container.status in ("running", "paused"):
                 return GithubHuntState(
                     project_id=project_id,
-                    status=GithubHuntStatus.RUNNING,
+                    status=GithubHuntStatus.PAUSED if container.status == "paused" else GithubHuntStatus.RUNNING,
                     container_id=container.id,
                 )
         except NotFound:
@@ -875,8 +981,8 @@ class ContainerManager:
 
         # Check if already running
         current_state = await self.get_github_hunt_status(project_id)
-        if current_state.status == GithubHuntStatus.RUNNING:
-            raise ValueError(f"GitHub hunt already running for project {project_id}")
+        if current_state.status in (GithubHuntStatus.RUNNING, GithubHuntStatus.PAUSED):
+            raise ValueError(f"GitHub hunt already active for project {project_id}")
 
         # Clean up any existing container
         container_name = self._get_github_hunt_container_name(project_id)
@@ -946,11 +1052,57 @@ class ContainerManager:
 
         return state
 
+    async def pause_github_hunt(self, project_id: str) -> GithubHuntState:
+        """Pause a running GitHub hunt process"""
+        state = await self.get_github_hunt_status(project_id)
+
+        if state.status != GithubHuntStatus.RUNNING:
+            return state
+
+        if state.container_id:
+            try:
+                container = self.client.containers.get(state.container_id)
+                container.pause()
+                state.status = GithubHuntStatus.PAUSED
+                self.github_hunt_states[project_id] = state
+                logger.info(f"Paused GitHub hunt container for project {project_id}")
+            except NotFound:
+                state.status = GithubHuntStatus.ERROR
+                state.error = "Container not found"
+            except APIError as e:
+                state.status = GithubHuntStatus.ERROR
+                state.error = f"Failed to pause: {e}"
+
+        return state
+
+    async def resume_github_hunt(self, project_id: str) -> GithubHuntState:
+        """Resume a paused GitHub hunt process"""
+        state = await self.get_github_hunt_status(project_id)
+
+        if state.status != GithubHuntStatus.PAUSED:
+            return state
+
+        if state.container_id:
+            try:
+                container = self.client.containers.get(state.container_id)
+                container.unpause()
+                state.status = GithubHuntStatus.RUNNING
+                self.github_hunt_states[project_id] = state
+                logger.info(f"Resumed GitHub hunt container for project {project_id}")
+            except NotFound:
+                state.status = GithubHuntStatus.ERROR
+                state.error = "Container not found"
+            except APIError as e:
+                state.status = GithubHuntStatus.ERROR
+                state.error = f"Failed to resume: {e}"
+
+        return state
+
     async def stop_github_hunt(self, project_id: str, timeout: int = 10) -> GithubHuntState:
         """Stop a running GitHub hunt process"""
         state = await self.get_github_hunt_status(project_id)
 
-        if state.status != GithubHuntStatus.RUNNING:
+        if state.status not in (GithubHuntStatus.RUNNING, GithubHuntStatus.PAUSED):
             return state
 
         state.status = GithubHuntStatus.STOPPING
@@ -958,6 +1110,8 @@ class ContainerManager:
         if state.container_id:
             try:
                 container = self.client.containers.get(state.container_id)
+                if container.status == "paused":
+                    container.unpause()
                 container.stop(timeout=timeout)
                 container.remove()
                 state.status = GithubHuntStatus.IDLE
@@ -1044,7 +1198,7 @@ class ContainerManager:
                         ).result(timeout=5)
                         try:
                             container.reload()
-                            if container.status != "running":
+                            if container.status not in ("running", "paused"):
                                 break
                         except Exception:
                             break
@@ -1103,7 +1257,7 @@ class ContainerManager:
                 except asyncio.TimeoutError:
                     try:
                         container.reload()
-                        if container.status != "running":
+                        if container.status not in ("running", "paused"):
                             break
                     except Exception:
                         break

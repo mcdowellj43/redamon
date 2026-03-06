@@ -5,9 +5,10 @@ import { useState, useEffect, useCallback } from 'react'
 const SESSION_STORAGE_KEY = 'redamon-session-id'
 
 function generateSessionId(): string {
-  const timestamp = Date.now().toString(36)
-  const randomPart = Math.random().toString(36).substring(2, 10)
-  return `session_${timestamp}_${randomPart}`
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let code = ''
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)]
+  return `session_${code}`
 }
 
 export function useSession() {
@@ -31,9 +32,15 @@ export function useSession() {
     return newSessionId
   }, [])
 
+  const switchSession = useCallback((existingSessionId: string) => {
+    setSessionId(existingSessionId)
+    sessionStorage.setItem(SESSION_STORAGE_KEY, existingSessionId)
+  }, [])
+
   return {
     sessionId,
     resetSession,
+    switchSession,
     mounted,
   }
 }

@@ -7,6 +7,195 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0] - 2026-03-05
+
+### Added
+
+- **Pipeline Pause / Resume / Stop Controls** — full lifecycle management for all three pipelines (Recon, GVM Scan, GitHub Secret Hunt):
+  - **Pause** — freezes the running container via Docker cgroups (`container.pause()`). Zero changes to scan scripts; processes resume exactly where they left off
+  - **Resume** — unfreezes the container (`container.unpause()`), logs resume streaming instantly
+  - **Stop** — kills the container permanently. Paused containers are unpaused before stopping to avoid cgroup issues. Sub-containers (naabu, httpx, nuclei, etc.) are also cleaned up
+  - **Toolbar UI** — when running: spinner + Pause button + Stop button. When paused: Resume button + Stop button. When stopping: "Stopping..." with disabled controls
+  - **Logs drawer controls** — pause/resume and stop buttons in the status bar, with `Paused` status indicator and spinner during stopping
+  - **Optimistic UI** — stop button immediately shows "Stopping..." before the API responds
+  - **SSE stays alive** during pause and stopping states so logs resume/complete without reconnection
+  - 6 new backend endpoints (`POST /{recon,gvm,github-hunt}/{projectId}/{pause,resume}`) and 9 new webapp API proxy routes (pause/resume/stop × 3 pipelines)
+  - Removed the auto-scroll play/pause toggle from logs drawer (redundant with "Scroll to bottom" button)
+- **IP/CIDR Targeting Mode** — start reconnaissance from IP addresses or CIDR ranges instead of a domain:
+  - **"Start from IP" toggle** in the Target & Modules tab — switches the project from domain-based to IP-based targeting. Locked after creation (cannot switch modes on existing projects)
+  - **Target IPs / CIDRs textarea** — accepts individual IPs (`192.168.1.1`), IPv6 (`2001:db8::1`), and CIDR ranges (`10.0.0.0/24`, `192.168.1.0/28`) with a max /24 (256 hosts) limit per CIDR
+  - **Reverse DNS (PTR) resolution** — each IP is resolved to its hostname via PTR records. When no PTR exists, a mock hostname is generated from the IP (e.g., `192-168-1-1`)
+  - **CIDR expansion** — CIDR ranges are automatically expanded into individual host IPs (network and broadcast addresses excluded). Original CIDRs are passed to naabu for efficient native scanning
+  - **Full pipeline support** — IP-mode projects run the complete 6-phase pipeline: reverse DNS + IP WHOIS → port scan → HTTP probe → resource enumeration (Katana, Kiterunner) → vulnerability scan (Nuclei) → CVE/MITRE enrichment
+  - **Neo4j graph integration** — mock Domain node (`ip-targets.{project_id}`) with `ip_mode: true`, Subdomain nodes (real PTR hostnames or IP-based mocks), IP nodes with WHOIS data, and all downstream relationships
+  - **Tenant-scoped Neo4j constraints** — IP, Subdomain, BaseURL, Port, Service, and Technology uniqueness constraints are now scoped to `(key, user_id, project_id)`, allowing the same IP/subdomain to exist in different projects without conflicts
+  - **Input validation** — new `webapp/src/lib/validation.ts` module with regex validators for IPs, CIDRs, domains, ports, status codes, HTTP headers, GitHub tokens, and more. Validation runs on form submit
+  - `ipMode` and `targetIps` fields added to Prisma schema with database migration
+- **Chisel TCP Tunnel Integration** — multi-port reverse tunnel alternative to ngrok for full attack path support:
+  - chisel (v1.11.4) installed alongside ngrok in kali-sandbox Dockerfile — single binary, supports amd64 and arm64
+  - Reverse tunnels both port 4444 (handler) and port 8080 (web delivery/HTA) through a single connection to a VPS
+  - Enables **Web Delivery** (Method C) and **HTA Delivery** (Method D) phishing attacks that require two ports — previously blocked with ngrok's single-port limitation
+  - **Stageless** Meterpreter payloads required through chisel (staged payloads fail through tunnels — same as ngrok)
+  - Deterministic endpoint discovery — LHOST derived from `CHISEL_SERVER_URL` hostname (no API polling needed)
+  - Auto-reconnect with exponential backoff if VPS connection drops
+  - `CHISEL_SERVER_URL` and `CHISEL_AUTH` env vars added to `.env.example` and `docker-compose.yml`
+  - `_query_chisel_tunnel()` utility in `agentic/utils.py` with `get_session_config_prompt()` integration
+  - `agentChiselTunnelEnabled` Prisma field with database migration
+- **Phishing / Social Engineering Attack Path** (`phishing_social_engineering`) — third classified attack path with a mandatory 6-step workflow: target platform selection, handler setup, payload generation, verification, delivery, and session callback:
+  - **Standalone Payloads** (Method A): msfvenom-based payload generation for Windows (exe, psh, psh-reflection, vba, hta-psh), Linux (elf, bash, python), macOS (macho), Android (apk), Java (war), and cross-platform (python) — with optional AV evasion via shikata_ga_nai encoding
+  - **Malicious Documents** (Method B): Metasploit fileformat modules for weaponized Word macro (.docm), Excel macro (.xlsm), PDF (Adobe Reader exploit), RTF (CVE-2017-0199 HTA handler), and LNK shortcut files
+  - **Web Delivery** (Method C): fileless one-liner delivery via `exploit/multi/script/web_delivery` supporting Python, PHP, PowerShell, Regsvr32 (AppLocker bypass), pubprn, SyncAppvPublishingServer, and PSH Binary targets
+  - **HTA Delivery** (Method D): HTML Application server via `exploit/windows/misc/hta_server` for browser-based payload delivery
+  - **Email Delivery**: Python smtplib-based email sending via `execute_code` with per-project SMTP configuration (host, port, user, password, sender, TLS) — agent asks at runtime if no SMTP settings are configured
+  - **Chat Download**: default delivery via `docker cp` command reported in chat
+  - New prompt module `phishing_social_engineering_prompts.py` with `PHISHING_SOCIAL_ENGINEERING_TOOLS` (full workflow) and `PHISHING_PAYLOAD_FORMAT_GUIDANCE` (OS-specific format decision tree and msfvenom quick reference)
+  - LLM classifier updated with phishing keywords and 10 example requests for accurate routing
+  - `phishing_social_engineering` added to `KNOWN_ATTACK_PATHS` set and `AttackPathClassification` validator
+- **ngrok TCP Tunnel Integration** — automatic reverse shell tunneling through ngrok for NAT/cloud environments:
+  - ngrok installed in kali-sandbox Dockerfile and auto-started in `entrypoint.sh` when `NGROK_AUTHTOKEN` env var is set
+  - TCP tunnel on port 4444 with ngrok API exposed on port 4040
+  - `_query_ngrok_tunnel()` utility in `agentic/utils.py` that queries ngrok API, discovers the public TCP endpoint, and resolves the hostname to an IP for targets with limited DNS
+  - `get_session_config_prompt()` auto-detects LHOST/LPORT from ngrok when enabled — injects a status banner, dual LHOST/LPORT table (handler vs payload), and enforces REVERSE-only payloads through ngrok
+  - `is_session_config_complete()` short-circuits to complete when ngrok tunnel is active
+  - `NGROK_AUTHTOKEN` added to `.env.example` and `docker-compose.yml` (kali-sandbox env + port 4040 exposed)
+- **Phishing Section in Project Settings** — new `PhishingSection` component with SMTP configuration textarea for per-project email delivery settings
+- **Tunnel Provider Dropdown** — replaced the single "Enable ngrok TCP Tunnel" toggle in Agent Behaviour settings with a **Tunnel Provider** dropdown (None / ngrok / chisel). Mutually exclusive — selecting one automatically disables the other
+- **Social Engineering Suggestion Templates** — 15 new suggestion buttons in AI Assistant drawer under a pink "Social Engineering" template group (Mail icon), covering payload generation, malicious documents, web delivery, HTA, email phishing, AV evasion, and more
+- **Phishing Attack Path Badge** — pink "PHISH" badge with `#ec4899` accent color for phishing sessions in the AI Assistant drawer
+- **Prisma Migrations** — `20260228120000_add_ngrok_tunnel` (agentNgrokTunnelEnabled), `20260228130000_add_phishing_smtp_config` (phishingSmtpConfig), and `20260305145750_add_ip_mode` (ipMode, targetIps) database migrations
+- **Remote Shells Tab** — new "Remote Shells" tab on the graph dashboard for real-time session management:
+  - Unified view of all active Metasploit sessions (meterpreter, shell), background handlers/jobs, and non-MSF listeners (netcat, socat)
+  - Sessions auto-detected from the Kali sandbox with 3-second polling and background cache refresh
+  - Built-in interactive terminal with command history (arrow keys), session-aware prompts, and auto-scroll
+  - Session actions: kill, upgrade shell to meterpreter, stop background jobs
+  - Agent busy detection with lock-timeout strategy — session listing always works from cache, interaction retries when lock is available
+  - Session-to-chat mapping — each session card shows which AI agent chat session created it
+  - Non-MSF session registration when agent creates netcat/socat listeners via `kali_shell`
+- **Command Whisperer** — AI-powered NLP-to-command translator in the Remote Shells terminal:
+  - Natural language input bar (purple accent) above the terminal command line
+  - Describe what you want in plain English → LLM generates the correct command for the current session type (meterpreter vs shell)
+  - Uses the project's configured LLM (same model as the AI agent) via a new `/command-whisperer` API endpoint
+  - Generated commands auto-fill the terminal input for review — no auto-execution
+- **Metasploit Session Persistence** — removed automatic Metasploit restart on new conversations:
+  - Removed `start_msf_prewarm` call from WebSocket initialization
+  - Removed `sessions -K` soft-reset on first `metasploit_console` use
+  - `msf_restart` tool now visible to the AI agent for manual use when a clean state is needed
+
+### Changed
+
+- **Conflict detection** — IP-mode projects skip domain conflict checks entirely (tenant-scoped Neo4j constraints make IP overlap safe across projects). Domain-mode conflict detection unchanged
+- **HTTP probe scope filtering** — `is_host_in_scope()` reordered to check `allowed_hosts` before `root_domain` scope, fixing IP-mode where the fake root domain caused all real hostnames to be filtered out. Added `input` URL fallback for redirect chains
+- **GAU disabled in IP mode** — passive URL archives index by domain, not IP; GAU is automatically skipped when `ip_mode` is active
+- **Domain ownership verification** skipped in IP mode — not applicable to IP-based targets
+- **Session Config Prompt** — refactored to inject pre-configured payload settings (LHOST/LPORT/ngrok) BEFORE the attack chain workflow, so all attack paths (not just CVE exploit) see payload direction — previously injected only after CVE fallback
+- **Agent prompts updated** — phishing, CVE exploit, and post-exploitation prompts now conditionally guide the agent based on which tunnel provider is active (ngrok limitations vs chisel capabilities)
+- **Recon: HTTP Probe DNS Fallback** — now probes common non-standard HTTP ports (8080, 8000, 8888, 3000, 5000, 9000) and HTTPS ports (8443, 4443, 9443) when falling back to DNS-only target building, improving coverage when naabu port scan results are empty
+- **Recon: Port Scanner SYN→CONNECT Retry** — when SYN scan completes but finds 0 open ports (firewall silently dropping SYN probes), automatically retries with CONNECT scan (full TCP handshake) which works through most firewalls
+- **Attack Paths Documentation** (`README.ATTACK_PATHS.md`) — comprehensive rewrite of Category 3 (Social Engineering / Phishing) with implementation details, 6-step workflow diagram, payload matrix, module reference, delivery methods, SMTP configuration guide, post-exploitation flow, and implementation file reference table
+- **Wiki and documentation** — updated AI Agent Guide, Project Settings Reference, Attack Paths guide, README, and README.ATTACK_PATHS.md with dual tunnel provider documentation
+
+### Fixed
+
+- **Duplicate port in https_ports set** — removed duplicate `443` and stale `8080` from `https_ports` in `build_targets_from_naabu()`
+
+---
+
+## [2.1.0] - 2026-02-27
+
+### Added
+
+- **CypherFix — Automated Vulnerability Remediation Pipeline** — end-to-end system that takes offensive findings from the Neo4j graph and turns them into merged code fixes:
+  - **Triage Agent** (`cypherfix_triage/`): AI agent that queries the Neo4j knowledge graph, correlates hundreds of reconnaissance and exploitation findings, deduplicates them, ranks by exploitability and severity, and produces a prioritized remediation plan
+  - **CodeFix Agent** (`cypherfix_codefix/`): autonomous code-repair agent that clones the target repository, navigates the codebase with 11 code-aware tools, implements targeted fixes for each triaged vulnerability, and opens a GitHub pull request ready for review and merge
+  - Real-time WebSocket streaming for both Triage and CodeFix agents with dedicated hooks (`useCypherFixTriageWS`, `useCypherFixCodeFixWS`)
+  - Remediations API (`/api/remediations/`) and hook (`useRemediations`) for persisting and retrieving remediation results
+  - CypherFix API routes (`/api/cypherfix/`) for triggering and managing triage and codefix sessions
+  - Agent-side API endpoints and orchestrator integration in `api.py` and `orchestrator.py`
+- **CypherFix Tab on Graph Page** — new tab (`CypherFixTab/`) in the Graph dashboard providing a dedicated interface to launch triage, review prioritized findings, trigger code fixes, and monitor remediation progress
+- **CypherFix Settings Section** — new `CypherFixSettingsSection` in Project Settings for configuring CypherFix parameters (GitHub repo, branch, AI model, triage/codefix behavior)
+- **CypherFix Type System** (`cypherfix-types.ts`) — shared TypeScript types for triage results, codefix sessions, remediation records, and WebSocket message protocols
+- **Agentic README Documentation** (`agentic/readmes/`) — internal documentation for the agentic module
+
+### Changed
+
+- **Global Header** — updated navigation to include CypherFix access point
+- **View Tabs** — styling updates to accommodate the new CypherFix tab
+- **Project Form** — expanded with CypherFix settings section and updated section exports
+- **Hooks barrel export** — updated `hooks/index.ts` with new CypherFix and remediation hooks
+- **Prisma Schema** — new fields for CypherFix configuration in the project model
+- **Agent Requirements** — new Python dependencies for CypherFix agents
+- **Docker Compose** — updated service configuration for CypherFix support
+- **README** — version bump to v2.1.0, CypherFix badge added, pipeline description updated
+
+---
+
+## [2.0.0] - 2026-02-22
+
+### Added
+
+- **Project Export & Import** — full project portability via ZIP archives:
+  - Export (`GET /api/projects/{id}/export`): streams a ZIP containing project settings, conversation history, Neo4j graph data (nodes + relationships with stable `_exportId` UUIDs), and recon/GVM/GitHub Hunt artifact files
+  - Import (`POST /api/projects/import`): restores a project from ZIP under a specified user with domain/subdomain conflict validation, constraint-aware Neo4j import (MERGE for unique-constrained labels, CREATE for unconstrained via APOC), and conversation session ID deduplication
+  - Import modal with drag-to-select file picker on the Projects page; Export button on Project Settings page
+- **EvoGraph — Dynamic Attack Chain Visualization** — real-time evolutionary graph that updates as agent sessions progress with attack chains:
+  - New `chain_graph_writer.py` module replacing the legacy `exploit_writer.py`
+  - Five new Neo4j node types: `AttackChain` (session root), `ChainStep` (tool execution), `ChainFinding` (discovered vulnerability/credential/info), `ChainDecision` (phase transition), `ChainFailure` (error/dead-end)
+  - Rich relationship model: `CHAIN_TARGETS`, `HAS_STEP`, `NEXT_STEP`, `LED_TO`, `DECISION_PRECEDED`, `PRODUCED`, `FAILED_WITH`, plus bridge relationships to the recon graph (`STEP_TARGETED`, `STEP_EXPLOITED`, `STEP_IDENTIFIED`, `FOUND_ON`, `FINDING_RELATES_CVE`)
+  - Visual differentiation on the graph canvas: inactive session chains render grey (orange when selected), active session ring pulses yellow, chain flow particles are static grey
+  - Cross-session awareness via `query_prior_chains()`: the agent knows what has already been tried in previous sessions
+  - All graph writes are async fire-and-forget (never block the orchestrator loop)
+- **Multi-Session System** — parallel attack sessions with full concurrency support:
+  - Multiple independent agent sessions per project, each with its own WebSocket connection keyed by `user_id:project_id:session_id`
+  - Per-session guidance queues and streaming callbacks (dicts keyed by `session_id`) preventing cross-session interference
+  - Central task registry (`_active_tasks`) that survives WebSocket reconnection — agents keep running in the background when users disconnect or switch conversations
+  - Connection replacement on reconnect: transfers running task, stop state, and guidance queue seamlessly
+  - Metasploit prewarm per session key
+- **Chat Persistence & Conversation History** — full message durability and session management:
+  - Ordered `asyncio.Queue` + single background worker replacing fire-and-forget `asyncio.create_task()`, ensuring messages are saved with correct `sequenceNum`
+  - All message types persisted: thinking, tool_start/complete (with raw output), phase updates, approval/question requests, responses, errors, todos
+  - Conversation CRUD API routes: list, get with messages, lookup by session, update, delete
+  - ConversationHistory panel in AI Assistant drawer with session title, status badge, phase indicator, iteration count, relative timestamps, and live "agent running" pulsing dot
+  - Full state restoration when loading a conversation: chat items, todo lists, pending approval/question state, phase, iteration count
+- **Per-Session Graph Controls** — granular visibility management for attack chains on the graph:
+  - "Show only this session in graph" toggle button in AI drawer header
+  - Sessions popup in the bottom bar with per-chain ON/OFF toggles, plus "All" / "None" bulk controls
+  - Session badge showing `visible/total` count
+  - Session title display (user's initial message truncated to 30 chars) instead of session ID codes
+- **Data Table View** — alternative tabular visualization of the attack surface graph:
+  - Graph Map / Data Table view tabs with Lucide icons
+  - `@tanstack/react-table` powered table with columns: Type (color-coded), Name, Properties count, In/Out connections, L2/L3 hop counts
+  - Global text filter, client-side sorting on all columns, row expansion with full property display
+  - Pagination (10/25/50/100 per page) and XLSX Excel export
+- **User Selector in Global Header** — switch between users directly from the top bar without navigating away, with two-letter avatar initials, dropdown user list, and "Manage Users" link
+- **OpenAI-Compatible Provider** — fifth AI provider supporting any OpenAI API-compatible endpoint (Ollama, LM Studio, vLLM, local proxies) via `OPENAI_COMPAT_BASE_URL` and `OPENAI_COMPAT_API_KEY` env vars, with `openai_compat/` prefix convention for model detection
+- **Hydra Brute Force Attack Path** — dedicated brute force attack path powered by THC Hydra, replacing Metasploit for credential-guessing operations with significantly higher performance. Supports 50+ protocols (SSH, FTP, RDP, SMB, MySQL, HTTP forms, and more) with configurable threads, timeouts, extra checks, and wordlist strategies. After credentials are discovered, the agent establishes access via `sshpass`, database clients, or protocol-specific tools
+- **Unclassified Attack Paths** — agent orchestrator now supports attack paths that don't fit the CVE Exploit or Hydra Brute Force categories, with dedicated prompts in `unclassified_prompts.py`
+- **GitHub Wiki** — 13-page documentation wiki covering getting started, user management, project creation, graph dashboard, reconnaissance, GVM scanning, GitHub secret hunting, AI agent guide, project settings reference, AI model providers, attack surface graph, data export/import, and troubleshooting
+
+### Changed
+
+- **Agent Orchestrator** — major refactoring: per-session dictionaries for guidance queues and streaming callbacks, central task registry for connection-resilient background tasks, dynamic connection resolution via `ws_manager`
+- **Graph Canvas** — new node types (ChainFinding, ChainDecision, ChainFailure) with distinct visual styling, session-aware coloring and particle rendering
+- **Graph API** — expanded to return attack chain data with session-level grouping
+- **PageBottomBar** — redesigned with session visibility controls, view-mode awareness, and session title display
+- **UI Theme Hierarchy** — light mode background layers reorganized (white → gray-50 → gray-100 → gray-200 → gray-300), added `--bg-quaternary` token
+- **Global Header** — navigation tabs (Projects/Red Zone) moved to right side, Graph Map/Data Table view tabs added, AI Agent button restyled to crimson, user selector added
+- **Node Drawer** — styling improvements, new chain node type support
+- **Target Section** — domain, subdomains, and root domain toggle locked in edit mode to prevent graph data inconsistency
+- **README** — comprehensive rewrite reflecting v2.0 features
+
+### Removed
+
+- **`exploit_writer.py`** — replaced by `chain_graph_writer.py` with full EvoGraph support
+- **`README.METASPLOIT.GUIDE.md`** — removed from agentic module
+
+### Fixed
+
+- **Race condition in chat message persistence** — fire-and-forget `asyncio.create_task()` caused messages to be saved with incorrect `sequenceNum`; replaced with ordered queue + single background worker
+- **Race condition in concurrent sessions** — `_guidance_queue` and `_streaming_callback` were single instance variables overwritten by each new session; changed to per-session dictionaries keyed by `session_id`
+
+---
+
 ## [1.3.0] - 2026-02-19
 
 ### Added
@@ -30,7 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Prompt Token Optimization** — lazy no-module fallback injection (saves ~1.1K tokens), compact formatting for older execution trace steps (full output only for last 5), trimmed rarely-used wordlist tables
 - **Metasploit Prewarm** — pre-initializes Metasploit console on agent startup to reduce first-use latency
 - **Markdown Report Export** — download the full agent conversation as a formatted Markdown file
-- **Brute Force & CVE Exploit Settings** — new Project Settings sections for configuring brute force speed/wordlist limits and CVE exploit attack path parameters
+- **Hydra Brute Force & CVE Exploit Settings** — new Project Settings sections for configuring Hydra brute force (threads, timeouts, extra checks, wordlist limits) and CVE exploit attack path parameters
 - **Node.js Deserialization Guinea Pig** — new test environment for CVE-2017-5941 (node-serialize RCE)
 - **Phase Tools Tooltip** — hover on phase badges to see which MCP tools are available in that phase
 - **GitHub Secrets Suggestion** — new suggestion button in AI Assistant to leverage discovered GitHub secrets during exploitation
@@ -99,7 +288,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Attack Path System** — agent now supports dynamic attack path selection with two built-in paths:
   - **CVE Exploit** — automated Metasploit module search, payload configuration, and exploit execution
-  - **Brute Force Credential Guess** — service-level brute force with configurable wordlists and max attempts per service
+  - **Hydra Brute Force** — THC Hydra-based credential guessing with configurable threads, timeouts, extra checks, and wordlist retry strategies
 - **Agent Guidance** — send real-time steering messages to the agent while it works, injected into the system prompt before the next reasoning step
 - **Agent Stop & Resume** — stop the agent at any point and resume from the last LangGraph checkpoint with full context preserved
 - **Project Creation UI** — full frontend project form with all configurable settings sections:

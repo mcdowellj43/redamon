@@ -277,12 +277,32 @@ class Neo4jClient:
 
     def _init_schema(self, session):
         """Initialize constraints and indexes for the graph schema."""
-        # Constraints
+        # Drop old global constraints that conflict with tenant-scoped ones
+        for stmt in [
+            "DROP CONSTRAINT subdomain_unique IF EXISTS",
+            "DROP CONSTRAINT ip_unique IF EXISTS",
+            "DROP CONSTRAINT baseurl_unique IF EXISTS",
+        ]:
+            try:
+                session.run(stmt)
+            except Exception:
+                pass
+
+        # Constraints (tenant-scoped for per-project nodes, global for shared reference nodes)
         constraints = [
             "CREATE CONSTRAINT domain_unique IF NOT EXISTS FOR (d:Domain) REQUIRE (d.name, d.user_id, d.project_id) IS UNIQUE",
-            "CREATE CONSTRAINT subdomain_unique IF NOT EXISTS FOR (s:Subdomain) REQUIRE s.name IS UNIQUE",
-            "CREATE CONSTRAINT ip_unique IF NOT EXISTS FOR (i:IP) REQUIRE i.address IS UNIQUE",
-            "CREATE CONSTRAINT baseurl_unique IF NOT EXISTS FOR (u:BaseURL) REQUIRE u.url IS UNIQUE",
+            "CREATE CONSTRAINT subdomain_unique IF NOT EXISTS FOR (s:Subdomain) REQUIRE (s.name, s.user_id, s.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT ip_unique IF NOT EXISTS FOR (i:IP) REQUIRE (i.address, i.user_id, i.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT baseurl_unique IF NOT EXISTS FOR (u:BaseURL) REQUIRE (u.url, u.user_id, u.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT port_unique IF NOT EXISTS FOR (p:Port) REQUIRE (p.number, p.protocol, p.ip_address, p.user_id, p.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT service_unique IF NOT EXISTS FOR (svc:Service) REQUIRE (svc.name, svc.port_number, svc.ip_address, svc.user_id, svc.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT technology_unique IF NOT EXISTS FOR (t:Technology) REQUIRE (t.name, t.version, t.user_id, t.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT endpoint_unique IF NOT EXISTS FOR (e:Endpoint) REQUIRE (e.path, e.method, e.baseurl, e.user_id, e.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT parameter_unique IF NOT EXISTS FOR (p:Parameter) REQUIRE (p.name, p.position, p.endpoint_path, p.baseurl, p.user_id, p.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT header_unique IF NOT EXISTS FOR (h:Header) REQUIRE (h.name, h.value, h.baseurl, h.user_id, h.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT dnsrecord_unique IF NOT EXISTS FOR (dns:DNSRecord) REQUIRE (dns.type, dns.value, dns.subdomain, dns.user_id, dns.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT certificate_unique IF NOT EXISTS FOR (c:Certificate) REQUIRE (c.subject_cn, c.user_id, c.project_id) IS UNIQUE",
+            "CREATE CONSTRAINT traceroute_unique IF NOT EXISTS FOR (tr:Traceroute) REQUIRE (tr.target_ip, tr.user_id, tr.project_id) IS UNIQUE",
             "CREATE CONSTRAINT cve_unique IF NOT EXISTS FOR (c:CVE) REQUIRE c.id IS UNIQUE",
             "CREATE CONSTRAINT mitredata_unique IF NOT EXISTS FOR (m:MitreData) REQUIRE m.id IS UNIQUE",
             "CREATE CONSTRAINT capec_unique IF NOT EXISTS FOR (cap:Capec) REQUIRE cap.capec_id IS UNIQUE",
@@ -295,6 +315,12 @@ class Neo4jClient:
             "CREATE CONSTRAINT githubpath_unique IF NOT EXISTS FOR (gp:GithubPath) REQUIRE gp.id IS UNIQUE",
             "CREATE CONSTRAINT githubsecret_unique IF NOT EXISTS FOR (gs:GithubSecret) REQUIRE gs.id IS UNIQUE",
             "CREATE CONSTRAINT githubsensitivefile_unique IF NOT EXISTS FOR (gsf:GithubSensitiveFile) REQUIRE gsf.id IS UNIQUE",
+            # Attack Chain Graph constraints
+            "CREATE CONSTRAINT attack_chain_id IF NOT EXISTS FOR (ac:AttackChain) REQUIRE ac.chain_id IS UNIQUE",
+            "CREATE CONSTRAINT chain_step_id IF NOT EXISTS FOR (s:ChainStep) REQUIRE s.step_id IS UNIQUE",
+            "CREATE CONSTRAINT chain_finding_id IF NOT EXISTS FOR (f:ChainFinding) REQUIRE f.finding_id IS UNIQUE",
+            "CREATE CONSTRAINT chain_decision_id IF NOT EXISTS FOR (d:ChainDecision) REQUIRE d.decision_id IS UNIQUE",
+            "CREATE CONSTRAINT chain_failure_id IF NOT EXISTS FOR (fl:ChainFailure) REQUIRE fl.failure_id IS UNIQUE",
         ]
 
         # Tenant composite indexes
@@ -318,6 +344,12 @@ class Neo4jClient:
             "CREATE INDEX idx_githubpath_tenant IF NOT EXISTS FOR (gp:GithubPath) ON (gp.user_id, gp.project_id)",
             "CREATE INDEX idx_githubsecret_tenant IF NOT EXISTS FOR (gs:GithubSecret) ON (gs.user_id, gs.project_id)",
             "CREATE INDEX idx_githubsensitivefile_tenant IF NOT EXISTS FOR (gsf:GithubSensitiveFile) ON (gsf.user_id, gsf.project_id)",
+            # Attack Chain Graph tenant indexes
+            "CREATE INDEX idx_attackchain_tenant IF NOT EXISTS FOR (ac:AttackChain) ON (ac.user_id, ac.project_id)",
+            "CREATE INDEX idx_chainstep_tenant IF NOT EXISTS FOR (s:ChainStep) ON (s.user_id, s.project_id)",
+            "CREATE INDEX idx_chainfinding_tenant IF NOT EXISTS FOR (f:ChainFinding) ON (f.user_id, f.project_id)",
+            "CREATE INDEX idx_chaindecision_tenant IF NOT EXISTS FOR (d:ChainDecision) ON (d.user_id, d.project_id)",
+            "CREATE INDEX idx_chainfailure_tenant IF NOT EXISTS FOR (fl:ChainFailure) ON (fl.user_id, fl.project_id)",
         ]
 
         # Additional indexes
@@ -348,6 +380,12 @@ class Neo4jClient:
             "CREATE INDEX idx_githubrepo_name IF NOT EXISTS FOR (gr:GithubRepository) ON (gr.name)",
             "CREATE INDEX idx_githubpath_path IF NOT EXISTS FOR (gp:GithubPath) ON (gp.path)",
             "CREATE INDEX idx_githubsecret_secret_type IF NOT EXISTS FOR (gs:GithubSecret) ON (gs.secret_type)",
+            # Attack Chain Graph functional indexes
+            "CREATE INDEX idx_chainstep_chain IF NOT EXISTS FOR (s:ChainStep) ON (s.chain_id)",
+            "CREATE INDEX idx_chainfinding_type IF NOT EXISTS FOR (f:ChainFinding) ON (f.finding_type)",
+            "CREATE INDEX idx_chainfinding_severity IF NOT EXISTS FOR (f:ChainFinding) ON (f.severity)",
+            "CREATE INDEX idx_chainfailure_type IF NOT EXISTS FOR (fl:ChainFailure) ON (fl.failure_type)",
+            "CREATE INDEX idx_attackchain_status IF NOT EXISTS FOR (ac:AttackChain) ON (ac.status)",
         ]
 
         for query in constraints + tenant_indexes + additional_indexes:
@@ -456,12 +494,12 @@ class Neo4jClient:
             # 1c. Delete GVM-sourced Certificate nodes (preserve recon/httpx certificates)
             result = session.run(
                 """
-                MATCH (c:Certificate {project_id: $pid})
+                MATCH (c:Certificate {user_id: $uid, project_id: $pid})
                 WHERE c.source = 'gvm'
                 DETACH DELETE c
                 RETURN count(c) as deleted
                 """,
-                pid=project_id
+                uid=user_id, pid=project_id
             )
             record = result.single()
             if record:
@@ -525,11 +563,12 @@ class Neo4jClient:
             # 5. Delete GVM USES_TECHNOLOGY relationships (Port→Tech and IP→Tech)
             result = session.run(
                 """
-                MATCH ()-[r:USES_TECHNOLOGY]->()
+                MATCH ({user_id: $uid, project_id: $pid})-[r:USES_TECHNOLOGY]->()
                 WHERE r.detected_by = 'gvm'
                 DELETE r
                 RETURN count(r) as deleted
                 """,
+                uid=user_id, pid=project_id
             )
             record = result.single()
             if record:
@@ -688,10 +727,8 @@ class Neo4jClient:
                     # Create Subdomain node
                     session.run(
                         """
-                        MERGE (s:Subdomain {name: $name})
-                        SET s.user_id = $user_id,
-                            s.project_id = $project_id,
-                            s.has_dns_records = $has_records,
+                        MERGE (s:Subdomain {name: $name, user_id: $user_id, project_id: $project_id})
+                        SET s.has_dns_records = $has_records,
                             s.discovered_at = datetime(),
                             s.updated_at = datetime()
                         """,
@@ -704,7 +741,7 @@ class Neo4jClient:
                     session.run(
                         """
                         MATCH (d:Domain {name: $domain, user_id: $user_id, project_id: $project_id})
-                        MATCH (s:Subdomain {name: $subdomain})
+                        MATCH (s:Subdomain {name: $subdomain, user_id: $user_id, project_id: $project_id})
                         MERGE (s)-[:BELONGS_TO]->(d)
                         """,
                         domain=root_domain, subdomain=subdomain,
@@ -725,10 +762,8 @@ class Neo4jClient:
                                     # Create IP node
                                     session.run(
                                         """
-                                        MERGE (i:IP {address: $address})
-                                        SET i.user_id = $user_id,
-                                            i.project_id = $project_id,
-                                            i.version = $version,
+                                        MERGE (i:IP {address: $address, user_id: $user_id, project_id: $project_id})
+                                        SET i.version = $version,
                                             i.updated_at = datetime()
                                         """,
                                         address=ip_addr, user_id=user_id, project_id=project_id,
@@ -740,11 +775,12 @@ class Neo4jClient:
                                     record_type = "A" if ip_version == "ipv4" else "AAAA"
                                     session.run(
                                         """
-                                        MATCH (s:Subdomain {name: $subdomain})
-                                        MATCH (i:IP {address: $ip})
+                                        MATCH (s:Subdomain {name: $subdomain, user_id: $user_id, project_id: $project_id})
+                                        MATCH (i:IP {address: $ip, user_id: $user_id, project_id: $project_id})
                                         MERGE (s)-[:RESOLVES_TO {record_type: $record_type}]->(i)
                                         """,
-                                        subdomain=subdomain, ip=ip_addr, record_type=record_type
+                                        subdomain=subdomain, ip=ip_addr, record_type=record_type,
+                                        user_id=user_id, project_id=project_id
                                     )
                                     stats["relationships_created"] += 1
                                 except Exception as e:
@@ -762,7 +798,7 @@ class Neo4jClient:
                                         # Create DNSRecord node
                                         session.run(
                                             """
-                                            MERGE (dns:DNSRecord {type: $type, value: $value, subdomain: $subdomain})
+                                            MERGE (dns:DNSRecord {type: $type, value: $value, subdomain: $subdomain, user_id: $user_id, project_id: $project_id})
                                             SET dns.user_id = $user_id,
                                                 dns.project_id = $project_id,
                                                 dns.updated_at = datetime()
@@ -775,11 +811,12 @@ class Neo4jClient:
                                         # Create relationship: Subdomain -[:HAS_DNS_RECORD]-> DNSRecord
                                         session.run(
                                             """
-                                            MATCH (s:Subdomain {name: $subdomain})
-                                            MATCH (dns:DNSRecord {type: $type, value: $value, subdomain: $subdomain})
+                                            MATCH (s:Subdomain {name: $subdomain, user_id: $user_id, project_id: $project_id})
+                                            MATCH (dns:DNSRecord {type: $type, value: $value, subdomain: $subdomain, user_id: $user_id, project_id: $project_id})
                                             MERGE (s)-[:HAS_DNS_RECORD]->(dns)
                                             """,
-                                            subdomain=subdomain, type=record_type, value=str(value)
+                                            subdomain=subdomain, type=record_type, value=str(value),
+                                            user_id=user_id, project_id=project_id
                                         )
                                         stats["relationships_created"] += 1
                                     except Exception as e:
@@ -792,6 +829,163 @@ class Neo4jClient:
             print(f"[+] Created {stats['subdomains_created']} Subdomain nodes")
             print(f"[+] Created {stats['ips_created']} IP nodes")
             print(f"[+] Created {stats['dns_records_created']} DNSRecord nodes")
+            print(f"[+] Created {stats['relationships_created']} relationships")
+
+            if stats["errors"]:
+                print(f"[!] {len(stats['errors'])} errors occurred")
+
+        return stats
+
+    def update_graph_from_ip_recon(self, recon_data: dict, user_id: str, project_id: str) -> dict:
+        """
+        Initialize the Neo4j graph for IP-based reconnaissance.
+
+        Creates:
+        - Mock Domain node (ip-targets.{project_id}) with ip_mode: True
+        - Subdomain nodes (real hostnames from PTR or mock IP-based names)
+        - IP nodes and RESOLVES_TO relationships
+        - BELONGS_TO relationships from subdomains to mock domain
+        - Per-IP WHOIS data on IP nodes
+        """
+        stats = {
+            "domain_created": False,
+            "subdomains_created": 0,
+            "ips_created": 0,
+            "relationships_created": 0,
+            "errors": []
+        }
+
+        with self.driver.session() as session:
+            self._init_schema(session)
+
+            metadata = recon_data.get("metadata", {})
+            whois_data = recon_data.get("whois", {})
+            subdomains = recon_data.get("subdomains", [])
+            dns_data = recon_data.get("dns", {})
+            ip_to_hostname = metadata.get("ip_to_hostname", {})
+            ip_whois = whois_data.get("ip_whois", {})
+
+            mock_domain = metadata.get("root_domain", f"ip-targets.{project_id}")
+
+            # 1. Create mock Domain node
+            try:
+                domain_props = {
+                    "name": mock_domain,
+                    "user_id": user_id,
+                    "project_id": project_id,
+                    "ip_mode": True,
+                    "is_mock": True,
+                    "scan_timestamp": metadata.get("scan_timestamp"),
+                    "scan_type": metadata.get("scan_type"),
+                    "target_ips": metadata.get("target_ips", []),
+                    "expanded_ips": metadata.get("expanded_ips", []),
+                    "modules_executed": metadata.get("modules_executed", []),
+                    "updated_at": datetime.now().isoformat()
+                }
+                domain_props = {k: v for k, v in domain_props.items() if v is not None}
+
+                session.run(
+                    """
+                    MERGE (d:Domain {name: $name, user_id: $user_id, project_id: $project_id})
+                    SET d += $props
+                    """,
+                    name=mock_domain, user_id=user_id, project_id=project_id, props=domain_props
+                )
+                stats["domain_created"] = True
+                print(f"[+] Created mock Domain node: {mock_domain}")
+            except Exception as e:
+                stats["errors"].append(f"Domain creation failed: {e}")
+                print(f"[!] Domain creation failed: {e}")
+
+            # 2. Create Subdomain nodes, IP nodes, and relationships
+            subdomains_dns = dns_data.get("subdomains", {})
+
+            for subdomain_name in subdomains:
+                try:
+                    sub_dns = subdomains_dns.get(subdomain_name, {})
+                    is_mock = sub_dns.get("is_mock", False)
+                    actual_ip = sub_dns.get("actual_ip", "")
+
+                    # Create Subdomain node
+                    sub_props = {
+                        "name": subdomain_name,
+                        "user_id": user_id,
+                        "project_id": project_id,
+                        "has_records": sub_dns.get("has_records", False),
+                        "is_mock": is_mock,
+                        "ip_mode": True,
+                        "updated_at": datetime.now().isoformat()
+                    }
+                    if actual_ip:
+                        sub_props["actual_ip"] = actual_ip
+
+                    session.run(
+                        """
+                        MERGE (s:Subdomain {name: $name, user_id: $user_id, project_id: $project_id})
+                        SET s += $props
+                        """,
+                        name=subdomain_name, user_id=user_id, project_id=project_id, props=sub_props
+                    )
+                    stats["subdomains_created"] += 1
+
+                    # Create BELONGS_TO relationship to mock domain
+                    session.run(
+                        """
+                        MATCH (s:Subdomain {name: $sub, user_id: $uid, project_id: $pid})
+                        MATCH (d:Domain {name: $domain, user_id: $uid, project_id: $pid})
+                        MERGE (s)-[:BELONGS_TO]->(d)
+                        """,
+                        sub=subdomain_name, domain=mock_domain, uid=user_id, pid=project_id
+                    )
+                    stats["relationships_created"] += 1
+
+                    # Create IP nodes and RESOLVES_TO relationships
+                    ips = sub_dns.get("ips", {})
+                    all_ips = (ips.get("ipv4", []) or []) + (ips.get("ipv6", []) or [])
+
+                    for ip in all_ips:
+                        # Get WHOIS info for this IP if available
+                        whois_info = ip_whois.get(ip, {})
+
+                        ip_props = {
+                            "address": ip,
+                            "user_id": user_id,
+                            "project_id": project_id,
+                            "version": "v6" if ":" in ip else "v4",
+                            "ip_mode": True,
+                            "updated_at": datetime.now().isoformat()
+                        }
+                        if whois_info:
+                            ip_props["organization"] = whois_info.get("org", "")
+                            ip_props["country"] = whois_info.get("country", "")
+
+                        session.run(
+                            """
+                            MERGE (i:IP {address: $addr, user_id: $uid, project_id: $pid})
+                            SET i += $props
+                            """,
+                            addr=ip, uid=user_id, pid=project_id, props=ip_props
+                        )
+                        stats["ips_created"] += 1
+
+                        # RESOLVES_TO
+                        session.run(
+                            """
+                            MATCH (s:Subdomain {name: $sub, user_id: $uid, project_id: $pid})
+                            MATCH (i:IP {address: $ip, user_id: $uid, project_id: $pid})
+                            MERGE (s)-[:RESOLVES_TO]->(i)
+                            """,
+                            sub=subdomain_name, ip=ip, uid=user_id, pid=project_id
+                        )
+                        stats["relationships_created"] += 1
+
+                except Exception as e:
+                    stats["errors"].append(f"Subdomain {subdomain_name}: {e}")
+                    print(f"[!] Error processing {subdomain_name}: {e}")
+
+            print(f"[+] IP Recon graph update complete:")
+            print(f"[+] Created {stats['subdomains_created']} Subdomain nodes")
+            print(f"[+] Created {stats['ips_created']} IP nodes")
             print(f"[+] Created {stats['relationships_created']} relationships")
 
             if stats["errors"]:
@@ -847,10 +1041,8 @@ class Neo4jClient:
 
                     session.run(
                         """
-                        MERGE (i:IP {address: $address})
-                        SET i.user_id = $user_id,
-                            i.project_id = $project_id,
-                            i.is_cdn = $is_cdn,
+                        MERGE (i:IP {address: $address, user_id: $user_id, project_id: $project_id})
+                        SET i.is_cdn = $is_cdn,
                             i.cdn_name = $cdn_name,
                             i.updated_at = datetime()
                         """,
@@ -874,10 +1066,8 @@ class Neo4jClient:
                     try:
                         session.run(
                             """
-                            MERGE (i:IP {address: $address})
-                            SET i.user_id = $user_id,
-                                i.project_id = $project_id,
-                                i.is_cdn = $is_cdn,
+                            MERGE (i:IP {address: $address, user_id: $user_id, project_id: $project_id})
+                            SET i.is_cdn = $is_cdn,
                                 i.cdn_name = $cdn_name,
                                 i.updated_at = datetime()
                             """,
@@ -898,13 +1088,11 @@ class Neo4jClient:
 
                     try:
                         # Create Port node linked to IP
-                        # Port uniqueness is per IP + port + protocol
+                        # Port uniqueness is per IP + port + protocol + tenant
                         session.run(
                             """
-                            MERGE (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip_addr})
-                            SET p.user_id = $user_id,
-                                p.project_id = $project_id,
-                                p.state = 'open',
+                            MERGE (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                            SET p.state = 'open',
                                 p.updated_at = datetime()
                             """,
                             port_number=port_number, protocol=protocol, ip_addr=ip_addr,
@@ -916,11 +1104,12 @@ class Neo4jClient:
                         if ip_addr:
                             session.run(
                                 """
-                                MATCH (i:IP {address: $ip_addr})
-                                MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip_addr})
+                                MATCH (i:IP {address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                                MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
                                 MERGE (i)-[:HAS_PORT]->(p)
                                 """,
-                                ip_addr=ip_addr, port_number=port_number, protocol=protocol
+                                ip_addr=ip_addr, port_number=port_number, protocol=protocol,
+                                user_id=user_id, project_id=project_id
                             )
                             stats["relationships_created"] += 1
 
@@ -928,10 +1117,8 @@ class Neo4jClient:
                         if service_name:
                             session.run(
                                 """
-                                MERGE (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr})
-                                SET svc.user_id = $user_id,
-                                    svc.project_id = $project_id,
-                                    svc.updated_at = datetime()
+                                MERGE (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                                SET svc.updated_at = datetime()
                                 """,
                                 service_name=service_name, port_number=port_number, ip_addr=ip_addr,
                                 user_id=user_id, project_id=project_id
@@ -941,12 +1128,12 @@ class Neo4jClient:
                             # Create relationship: Port -[:RUNS_SERVICE]-> Service
                             session.run(
                                 """
-                                MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip_addr})
-                                MATCH (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr})
+                                MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                                MATCH (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
                                 MERGE (p)-[:RUNS_SERVICE]->(svc)
                                 """,
                                 port_number=port_number, protocol=protocol, ip_addr=ip_addr,
-                                service_name=service_name
+                                service_name=service_name, user_id=user_id, project_id=project_id
                             )
                             stats["relationships_created"] += 1
 
@@ -1079,11 +1266,11 @@ class Neo4jClient:
 
                     session.run(
                         """
-                        MERGE (u:BaseURL {url: $url})
+                        MERGE (u:BaseURL {url: $url, user_id: $user_id, project_id: $project_id})
                         SET u += $props,
                             u.updated_at = datetime()
                         """,
-                        url=url, props=baseurl_props
+                        url=url, user_id=user_id, project_id=project_id, props=baseurl_props
                     )
                     stats["baseurls_created"] += 1
 
@@ -1113,22 +1300,22 @@ class Neo4jClient:
                             # Create Certificate node (unique by subject_cn + project_id)
                             session.run(
                                 """
-                                MERGE (c:Certificate {subject_cn: $subject_cn, project_id: $project_id})
+                                MERGE (c:Certificate {subject_cn: $subject_cn, user_id: $user_id, project_id: $project_id})
                                 SET c += $props,
                                     c.updated_at = datetime()
                                 """,
-                                subject_cn=subject_cn, project_id=project_id, props=cert_props
+                                subject_cn=subject_cn, user_id=user_id, project_id=project_id, props=cert_props
                             )
                             stats["certificates_created"] += 1
                             
                             # Create relationship: BaseURL -[:HAS_CERTIFICATE]-> Certificate
                             session.run(
                                 """
-                                MATCH (u:BaseURL {url: $url})
-                                MATCH (c:Certificate {subject_cn: $subject_cn, project_id: $project_id})
+                                MATCH (u:BaseURL {url: $url, user_id: $user_id, project_id: $project_id})
+                                MATCH (c:Certificate {subject_cn: $subject_cn, user_id: $user_id, project_id: $project_id})
                                 MERGE (u)-[:HAS_CERTIFICATE]->(c)
                                 """,
-                                url=url, subject_cn=subject_cn, project_id=project_id
+                                url=url, subject_cn=subject_cn, project_id=project_id, user_id=user_id
                             )
                             stats["relationships_created"] += 1
 
@@ -1147,10 +1334,11 @@ class Neo4jClient:
                             # If so, reuse it instead of creating a duplicate with different name
                             existing_service = session.run(
                                 """
-                                MATCH (svc:Service {port_number: $port_number, ip_address: $ip_addr})
+                                MATCH (svc:Service {port_number: $port_number, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
                                 RETURN svc.name as name LIMIT 1
                                 """,
-                                port_number=port_number, ip_addr=resolved_ip
+                                port_number=port_number, ip_addr=resolved_ip,
+                                user_id=user_id, project_id=project_id
                             ).single()
 
                             if existing_service:
@@ -1161,10 +1349,8 @@ class Neo4jClient:
                                 service_name = default_service_name
                                 session.run(
                                     """
-                                    MERGE (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr})
-                                    SET svc.user_id = $user_id,
-                                        svc.project_id = $project_id,
-                                        svc.updated_at = datetime()
+                                    MERGE (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                                    SET svc.updated_at = datetime()
                                     """,
                                     service_name=service_name, port_number=port_number, ip_addr=resolved_ip,
                                     user_id=user_id, project_id=project_id
@@ -1174,24 +1360,23 @@ class Neo4jClient:
                             # Create relationship: Service -[:SERVES_URL]-> BaseURL
                             session.run(
                                 """
-                                MATCH (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr})
-                                MATCH (u:BaseURL {url: $url})
+                                MATCH (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                                MATCH (u:BaseURL {url: $url, user_id: $user_id, project_id: $project_id})
                                 MERGE (svc)-[:SERVES_URL]->(u)
                                 """,
-                                service_name=service_name, port_number=port_number, ip_addr=resolved_ip, url=url
+                                service_name=service_name, port_number=port_number, ip_addr=resolved_ip, url=url,
+                                user_id=user_id, project_id=project_id
                             )
                             stats["relationships_created"] += 1
 
                             # Also ensure Port node exists and is connected to Service
                             session.run(
                                 """
-                                MERGE (p:Port {number: $port_number, protocol: 'tcp', ip_address: $ip_addr})
-                                SET p.user_id = $user_id,
-                                    p.project_id = $project_id,
-                                    p.state = 'open',
+                                MERGE (p:Port {number: $port_number, protocol: 'tcp', ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                                SET p.state = 'open',
                                     p.updated_at = datetime()
                                 WITH p
-                                MATCH (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr})
+                                MATCH (svc:Service {name: $service_name, port_number: $port_number, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
                                 MERGE (p)-[:RUNS_SERVICE]->(svc)
                                 """,
                                 port_number=port_number, ip_addr=resolved_ip,
@@ -1202,11 +1387,12 @@ class Neo4jClient:
                             # Also ensure IP -[:HAS_PORT]-> Port relationship exists
                             session.run(
                                 """
-                                MATCH (i:IP {address: $ip_addr})
-                                MATCH (p:Port {number: $port_number, protocol: 'tcp', ip_address: $ip_addr})
+                                MATCH (i:IP {address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                                MATCH (p:Port {number: $port_number, protocol: 'tcp', ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
                                 MERGE (i)-[:HAS_PORT]->(p)
                                 """,
-                                ip_addr=resolved_ip, port_number=port_number
+                                ip_addr=resolved_ip, port_number=port_number,
+                                user_id=user_id, project_id=project_id
                             )
 
                     # Process technologies from both httpx and wappalyzer
@@ -1242,25 +1428,27 @@ class Neo4jClient:
                             # Remove None values
                             tech_props = {k: v for k, v in tech_props.items() if v is not None}
 
-                            # Create Technology node (unique by name + version)
+                            # Create Technology node (unique by name + version + tenant)
                             if tech_version:
                                 session.run(
                                     """
-                                    MERGE (t:Technology {name: $name, version: $version})
+                                    MERGE (t:Technology {name: $name, version: $version, user_id: $user_id, project_id: $project_id})
                                     SET t += $props,
                                         t.updated_at = datetime()
                                     """,
-                                    name=tech_name, version=tech_version, props=tech_props
+                                    name=tech_name, version=tech_version, props=tech_props,
+                                    user_id=user_id, project_id=project_id
                                 )
                                 processed_techs.add((tech_name, tech_version))
                             else:
                                 session.run(
                                     """
-                                    MERGE (t:Technology {name: $name})
+                                    MERGE (t:Technology {name: $name, version: '', user_id: $user_id, project_id: $project_id})
                                     ON CREATE SET t += $props, t.updated_at = datetime()
                                     ON MATCH SET t.updated_at = datetime()
                                     """,
-                                    name=tech_name, props=tech_props
+                                    name=tech_name, props=tech_props,
+                                    user_id=user_id, project_id=project_id
                                 )
                                 processed_techs.add((tech_name, None))
                             stats["technologies_created"] += 1
@@ -1269,21 +1457,22 @@ class Neo4jClient:
                             if tech_version:
                                 session.run(
                                     """
-                                    MATCH (u:BaseURL {url: $url})
-                                    MATCH (t:Technology {name: $tech_name, version: $tech_version})
+                                    MATCH (u:BaseURL {url: $url, user_id: $user_id, project_id: $project_id})
+                                    MATCH (t:Technology {name: $tech_name, version: $tech_version, user_id: $user_id, project_id: $project_id})
                                     MERGE (u)-[:USES_TECHNOLOGY {confidence: $confidence, detected_by: 'httpx'}]->(t)
                                     """,
-                                    url=url, tech_name=tech_name, tech_version=tech_version, confidence=confidence
+                                    url=url, tech_name=tech_name, tech_version=tech_version, confidence=confidence,
+                                    user_id=user_id, project_id=project_id
                                 )
                             else:
                                 session.run(
                                     """
-                                    MATCH (u:BaseURL {url: $url})
-                                    MATCH (t:Technology {name: $tech_name})
-                                    WHERE t.version IS NULL
+                                    MATCH (u:BaseURL {url: $url, user_id: $user_id, project_id: $project_id})
+                                    MATCH (t:Technology {name: $tech_name, version: '', user_id: $user_id, project_id: $project_id})
                                     MERGE (u)-[:USES_TECHNOLOGY {confidence: $confidence, detected_by: 'httpx'}]->(t)
                                     """,
-                                    url=url, tech_name=tech_name, confidence=confidence
+                                    url=url, tech_name=tech_name, confidence=confidence,
+                                    user_id=user_id, project_id=project_id
                                 )
                             stats["relationships_created"] += 1
 
@@ -1328,20 +1517,22 @@ class Neo4jClient:
                             if tech_version:
                                 session.run(
                                     """
-                                    MERGE (t:Technology {name: $name, version: $version})
+                                    MERGE (t:Technology {name: $name, version: $version, user_id: $user_id, project_id: $project_id})
                                     SET t += $props,
                                         t.updated_at = datetime()
                                     """,
-                                    name=tech_name, version=tech_version, props=tech_props
+                                    name=tech_name, version=tech_version, props=tech_props,
+                                    user_id=user_id, project_id=project_id
                                 )
                             else:
                                 session.run(
                                     """
-                                    MERGE (t:Technology {name: $name})
+                                    MERGE (t:Technology {name: $name, version: '', user_id: $user_id, project_id: $project_id})
                                     ON CREATE SET t += $props, t.updated_at = datetime()
                                     ON MATCH SET t.updated_at = datetime()
                                     """,
-                                    name=tech_name, props=tech_props
+                                    name=tech_name, props=tech_props,
+                                    user_id=user_id, project_id=project_id
                                 )
                             stats["technologies_created"] += 1
 
@@ -1349,21 +1540,22 @@ class Neo4jClient:
                             if tech_version:
                                 session.run(
                                     """
-                                    MATCH (u:BaseURL {url: $url})
-                                    MATCH (t:Technology {name: $tech_name, version: $tech_version})
+                                    MATCH (u:BaseURL {url: $url, user_id: $user_id, project_id: $project_id})
+                                    MATCH (t:Technology {name: $tech_name, version: $tech_version, user_id: $user_id, project_id: $project_id})
                                     MERGE (u)-[:USES_TECHNOLOGY {confidence: $confidence, detected_by: 'wappalyzer'}]->(t)
                                     """,
-                                    url=url, tech_name=tech_name, tech_version=tech_version, confidence=confidence
+                                    url=url, tech_name=tech_name, tech_version=tech_version, confidence=confidence,
+                                    user_id=user_id, project_id=project_id
                                 )
                             else:
                                 session.run(
                                     """
-                                    MATCH (u:BaseURL {url: $url})
-                                    MATCH (t:Technology {name: $tech_name})
-                                    WHERE t.version IS NULL
+                                    MATCH (u:BaseURL {url: $url, user_id: $user_id, project_id: $project_id})
+                                    MATCH (t:Technology {name: $tech_name, version: '', user_id: $user_id, project_id: $project_id})
                                     MERGE (u)-[:USES_TECHNOLOGY {confidence: $confidence, detected_by: 'wappalyzer'}]->(t)
                                     """,
-                                    url=url, tech_name=tech_name, confidence=confidence
+                                    url=url, tech_name=tech_name, confidence=confidence,
+                                    user_id=user_id, project_id=project_id
                                 )
                             stats["relationships_created"] += 1
 
@@ -1383,7 +1575,7 @@ class Neo4jClient:
 
                             session.run(
                                 """
-                                MERGE (h:Header {name: $name, value: $value, baseurl: $url})
+                                MERGE (h:Header {name: $name, value: $value, baseurl: $url, user_id: $user_id, project_id: $project_id})
                                 SET h.user_id = $user_id,
                                     h.project_id = $project_id,
                                     h.is_security_header = $is_security,
@@ -1399,11 +1591,12 @@ class Neo4jClient:
                             # Create relationship: BaseURL -[:HAS_HEADER]-> Header
                             session.run(
                                 """
-                                MATCH (u:BaseURL {url: $url})
-                                MATCH (h:Header {name: $name, value: $value, baseurl: $url})
+                                MATCH (u:BaseURL {url: $url, user_id: $user_id, project_id: $project_id})
+                                MATCH (h:Header {name: $name, value: $value, baseurl: $url, user_id: $user_id, project_id: $project_id})
                                 MERGE (u)-[:HAS_HEADER]->(h)
                                 """,
-                                url=url, name=header_name, value=str(header_value)
+                                url=url, name=header_name, value=str(header_value),
+                                user_id=user_id, project_id=project_id
                             )
                             stats["relationships_created"] += 1
 
@@ -1703,7 +1896,7 @@ class Neo4jClient:
 
                         session.run(
                             """
-                            MERGE (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
+                            MERGE (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                             SET e.user_id = $user_id,
                                 e.project_id = $project_id,
                                 e.has_parameters = $has_parameters,
@@ -1723,13 +1916,11 @@ class Neo4jClient:
                         # BaseURL may not exist if endpoint was discovered by crawling a different subdomain
                         session.run(
                             """
-                            MERGE (bu:BaseURL {url: $baseurl})
-                            ON CREATE SET bu.user_id = $user_id,
-                                          bu.project_id = $project_id,
-                                          bu.source = 'katana_crawl',
+                            MERGE (bu:BaseURL {url: $baseurl, user_id: $user_id, project_id: $project_id})
+                            ON CREATE SET bu.source = 'katana_crawl',
                                           bu.updated_at = datetime()
                             WITH bu
-                            MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
+                            MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                             MERGE (bu)-[:HAS_ENDPOINT]->(e)
                             """,
                             baseurl=base_url, path=path, method=method,
@@ -1747,7 +1938,7 @@ class Neo4jClient:
 
                                 session.run(
                                     """
-                                    MERGE (p:Parameter {name: $name, position: $position, endpoint_path: $endpoint_path, baseurl: $baseurl})
+                                    MERGE (p:Parameter {name: $name, position: $position, endpoint_path: $endpoint_path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                     SET p.user_id = $user_id,
                                         p.project_id = $project_id,
                                         p.sample_value = $sample_value,
@@ -1764,8 +1955,8 @@ class Neo4jClient:
                                 # Create relationship: Endpoint -[:HAS_PARAMETER]-> Parameter
                                 session.run(
                                     """
-                                    MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
-                                    MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl})
+                                    MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
+                                    MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                     MERGE (e)-[:HAS_PARAMETER]->(p)
                                     """,
                                     path=path, method=method, baseurl=base_url,
@@ -1899,7 +2090,7 @@ class Neo4jClient:
                         if endpoint_key not in created_endpoints:
                             session.run(
                                 """
-                                MERGE (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
+                                MERGE (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                 SET e.user_id = $user_id,
                                     e.project_id = $project_id,
                                     e.has_parameters = true,
@@ -1915,13 +2106,11 @@ class Neo4jClient:
                             # Create BaseURL node if it doesn't exist and relationship
                             session.run(
                                 """
-                                MERGE (bu:BaseURL {url: $baseurl})
-                                ON CREATE SET bu.user_id = $user_id,
-                                              bu.project_id = $project_id,
-                                              bu.source = 'vuln_scan',
+                                MERGE (bu:BaseURL {url: $baseurl, user_id: $user_id, project_id: $project_id})
+                                ON CREATE SET bu.source = 'vuln_scan',
                                               bu.updated_at = datetime()
                                 WITH bu
-                                MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
+                                MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                 MERGE (bu)-[:HAS_ENDPOINT]->(e)
                                 """,
                                 baseurl=vuln_base_url, path=vuln_path, method=fuzzing_method,
@@ -1933,7 +2122,7 @@ class Neo4jClient:
                         session.run(
                             """
                             MATCH (v:Vulnerability {id: $vuln_id})
-                            MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
+                            MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                             MERGE (v)-[:FOUND_AT]->(e)
                             """,
                             vuln_id=vuln_id, path=vuln_path, method=fuzzing_method, baseurl=vuln_base_url
@@ -1950,7 +2139,7 @@ class Neo4jClient:
                             # Create or update Parameter node (mark as injectable)
                             session.run(
                                 """
-                                MERGE (p:Parameter {name: $name, position: $position, endpoint_path: $endpoint_path, baseurl: $baseurl})
+                                MERGE (p:Parameter {name: $name, position: $position, endpoint_path: $endpoint_path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                 SET p.user_id = $user_id,
                                     p.project_id = $project_id,
                                     p.is_injectable = true,
@@ -1967,8 +2156,8 @@ class Neo4jClient:
                                 # Create relationship: Endpoint -[:HAS_PARAMETER]-> Parameter
                                 session.run(
                                     """
-                                    MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
-                                    MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl})
+                                    MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
+                                    MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                     MERGE (e)-[:HAS_PARAMETER]->(p)
                                     """,
                                     path=vuln_path, method=fuzzing_method, baseurl=vuln_base_url,
@@ -1980,7 +2169,7 @@ class Neo4jClient:
                             session.run(
                                 """
                                 MATCH (v:Vulnerability {id: $vuln_id})
-                                MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl})
+                                MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                 MERGE (v)-[:AFFECTS_PARAMETER]->(p)
                                 """,
                                 vuln_id=vuln_id, param_name=fuzzing_param, position=fuzzing_position,
@@ -2063,7 +2252,7 @@ class Neo4jClient:
                         if tech_version:
                             result = session.run(
                                 """
-                                MATCH (t:Technology {project_id: $project_id})
+                                MATCH (t:Technology {user_id: $user_id, project_id: $project_id})
                                 WHERE (toLower(t.name) = toLower($tech_name_clean)
                                        OR toLower(t.name) = toLower($tech_product)
                                        OR toLower(t.name) = toLower($tech_key)
@@ -2073,7 +2262,7 @@ class Neo4jClient:
                                 MERGE (t)-[:HAS_KNOWN_CVE]->(c)
                                 RETURN count(*) as matched
                                 """,
-                                project_id=project_id, tech_name_clean=tech_name_clean,
+                                user_id=user_id, project_id=project_id, tech_name_clean=tech_name_clean,
                                 tech_product=tech_product, tech_key=tech_name,
                                 tech_version=tech_version, cve_id=cve_id
                             )
@@ -2084,17 +2273,17 @@ class Neo4jClient:
                             # No version specified - match technologies without version
                             result = session.run(
                                 """
-                                MATCH (t:Technology {project_id: $project_id})
+                                MATCH (t:Technology {user_id: $user_id, project_id: $project_id})
                                 WHERE (toLower(t.name) = toLower($tech_name_clean)
                                        OR toLower(t.name) = toLower($tech_product)
                                        OR toLower(t.name) = toLower($tech_key)
                                        OR toLower(t.name) CONTAINS toLower($tech_product))
-                                  AND t.version IS NULL
+                                  AND t.version = ''
                                 MATCH (c:CVE {id: $cve_id})
                                 MERGE (t)-[:HAS_KNOWN_CVE]->(c)
                                 RETURN count(*) as matched
                                 """,
-                                project_id=project_id, tech_name_clean=tech_name_clean,
+                                user_id=user_id, project_id=project_id, tech_name_clean=tech_name_clean,
                                 tech_product=tech_product, tech_key=tech_name, cve_id=cve_id
                             )
                             matched = result.single()["matched"]
@@ -2224,21 +2413,20 @@ class Neo4jClient:
                         if ip_address:
                             session.run(
                                 """
-                                MERGE (i:IP {address: $address})
-                                SET i.user_id = $user_id,
-                                    i.project_id = $project_id,
-                                    i.updated_at = datetime()
+                                MERGE (i:IP {address: $address, user_id: $user_id, project_id: $project_id})
+                                SET i.updated_at = datetime()
                                 """,
                                 address=ip_address, user_id=user_id, project_id=project_id
                             )
 
                             session.run(
                                 """
-                                MATCH (i:IP {address: $ip_addr})
+                                MATCH (i:IP {address: $ip_addr, user_id: $user_id, project_id: $project_id})
                                 MATCH (v:Vulnerability {id: $vuln_id})
                                 MERGE (i)-[:HAS_VULNERABILITY]->(v)
                                 """,
-                                ip_addr=ip_address, vuln_id=vuln_id
+                                ip_addr=ip_address, vuln_id=vuln_id,
+                                user_id=user_id, project_id=project_id
                             )
                             stats["relationships_created"] += 1
 
@@ -2248,15 +2436,16 @@ class Neo4jClient:
                             # Subdomain -[:WAF_BYPASS_VIA]-> IP (shows which subdomain can bypass WAF via IP)
                             session.run(
                                 """
-                                MATCH (s:Subdomain {name: $subdomain})
-                                MATCH (i:IP {address: $ip_addr})
+                                MATCH (s:Subdomain {name: $subdomain, user_id: $user_id, project_id: $project_id})
+                                MATCH (i:IP {address: $ip_addr, user_id: $user_id, project_id: $project_id})
                                 MERGE (s)-[:WAF_BYPASS_VIA {
                                     discovered_at: datetime(),
                                     evidence: $evidence
                                 }]->(i)
                                 """,
                                 subdomain=target_host, ip_addr=ip_address,
-                                evidence=evidence or ""
+                                evidence=evidence or "",
+                                user_id=user_id, project_id=project_id
                             )
                             waf_bypass_rels += 1
 
@@ -2357,12 +2546,12 @@ class Neo4jClient:
                         if _is_ip_address(url_host):
                             result = session.run(
                                 """
-                                MATCH (i:IP {address: $address, project_id: $project_id})
+                                MATCH (i:IP {address: $address, user_id: $user_id, project_id: $project_id})
                                 MATCH (v:Vulnerability {id: $vuln_id})
                                 MERGE (i)-[:HAS_VULNERABILITY]->(v)
                                 RETURN count(*) as matched
                                 """,
-                                address=url_host, project_id=project_id, vuln_id=vuln_id
+                                address=url_host, user_id=user_id, project_id=project_id, vuln_id=vuln_id
                             )
                             if result.single()["matched"] > 0:
                                 stats["relationships_created"] += 1
@@ -2372,12 +2561,12 @@ class Neo4jClient:
                             base_url = f"{parsed.scheme}://{parsed.netloc}"
                             result = session.run(
                                 """
-                                MATCH (bu:BaseURL {url: $baseurl, project_id: $project_id})
+                                MATCH (bu:BaseURL {url: $baseurl, user_id: $user_id, project_id: $project_id})
                                 MATCH (v:Vulnerability {id: $vuln_id})
                                 MERGE (bu)-[:HAS_VULNERABILITY]->(v)
                                 RETURN count(*) as matched
                                 """,
-                                baseurl=base_url, project_id=project_id, vuln_id=vuln_id
+                                baseurl=base_url, user_id=user_id, project_id=project_id, vuln_id=vuln_id
                             )
                             if result.single()["matched"] > 0:
                                 stats["relationships_created"] += 1
@@ -2386,12 +2575,12 @@ class Neo4jClient:
                                 # BaseURL doesn't exist, try Subdomain/Domain
                                 result = session.run(
                                     """
-                                    MATCH (s:Subdomain {name: $hostname, project_id: $project_id})
+                                    MATCH (s:Subdomain {name: $hostname, user_id: $user_id, project_id: $project_id})
                                     MATCH (v:Vulnerability {id: $vuln_id})
                                     MERGE (s)-[:HAS_VULNERABILITY]->(v)
                                     RETURN count(*) as matched
                                     """,
-                                    hostname=url_host, project_id=project_id, vuln_id=vuln_id
+                                    hostname=url_host, user_id=user_id, project_id=project_id, vuln_id=vuln_id
                                 )
                                 if result.single()["matched"] > 0:
                                     stats["relationships_created"] += 1
@@ -2400,26 +2589,26 @@ class Neo4jClient:
                                     # Try Domain
                                     session.run(
                                         """
-                                        MATCH (d:Domain {name: $hostname, project_id: $project_id})
+                                        MATCH (d:Domain {name: $hostname, user_id: $user_id, project_id: $project_id})
                                         MATCH (v:Vulnerability {id: $vuln_id})
                                         MERGE (d)-[:HAS_VULNERABILITY]->(v)
                                         """,
-                                        hostname=url_host, project_id=project_id, vuln_id=vuln_id
+                                        hostname=url_host, user_id=user_id, project_id=project_id, vuln_id=vuln_id
                                     )
                                     stats["relationships_created"] += 1
                                     relationship_created = True
-                    
+
                     # For hostname-only findings (no URL): connect to Subdomain/Domain
                     elif hostname and not relationship_created:
                         # Try to link to Subdomain node
                         result = session.run(
                             """
-                            MATCH (s:Subdomain {name: $hostname, project_id: $project_id})
+                            MATCH (s:Subdomain {name: $hostname, user_id: $user_id, project_id: $project_id})
                             MATCH (v:Vulnerability {id: $vuln_id})
                             MERGE (s)-[:HAS_VULNERABILITY]->(v)
                             RETURN count(*) as matched
                             """,
-                            hostname=hostname, project_id=project_id, vuln_id=vuln_id
+                            hostname=hostname, user_id=user_id, project_id=project_id, vuln_id=vuln_id
                         )
                         if result.single()["matched"] > 0:
                             stats["relationships_created"] += 1
@@ -2428,11 +2617,11 @@ class Neo4jClient:
                             # Try Domain node if not a subdomain
                             session.run(
                                 """
-                                MATCH (d:Domain {name: $hostname, project_id: $project_id})
+                                MATCH (d:Domain {name: $hostname, user_id: $user_id, project_id: $project_id})
                                 MATCH (v:Vulnerability {id: $vuln_id})
                                 MERGE (d)-[:HAS_VULNERABILITY]->(v)
                                 """,
-                                hostname=hostname, project_id=project_id, vuln_id=vuln_id
+                                hostname=hostname, user_id=user_id, project_id=project_id, vuln_id=vuln_id
                             )
                             stats["relationships_created"] += 1
                             relationship_created = True
@@ -2441,11 +2630,11 @@ class Neo4jClient:
                     elif matched_ip and not relationship_created:
                         session.run(
                             """
-                            MATCH (i:IP {address: $address, project_id: $project_id})
+                            MATCH (i:IP {address: $address, user_id: $user_id, project_id: $project_id})
                             MATCH (v:Vulnerability {id: $vuln_id})
                             MERGE (i)-[:HAS_VULNERABILITY]->(v)
                             """,
-                            address=matched_ip, project_id=project_id, vuln_id=vuln_id
+                            address=matched_ip, user_id=user_id, project_id=project_id, vuln_id=vuln_id
                         )
                         stats["relationships_created"] += 1
 
@@ -2583,7 +2772,7 @@ class Neo4jClient:
                             # Create Endpoint node
                             session.run(
                                 """
-                                MERGE (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
+                                MERGE (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                 SET e.user_id = $user_id,
                                     e.project_id = $project_id,
                                     e.category = $category,
@@ -2610,13 +2799,11 @@ class Neo4jClient:
                             # Create BaseURL node if it doesn't exist and relationship
                             session.run(
                                 """
-                                MERGE (bu:BaseURL {url: $baseurl})
-                                ON CREATE SET bu.user_id = $user_id,
-                                              bu.project_id = $project_id,
-                                              bu.source = 'resource_enum',
+                                MERGE (bu:BaseURL {url: $baseurl, user_id: $user_id, project_id: $project_id})
+                                ON CREATE SET bu.source = 'resource_enum',
                                               bu.updated_at = datetime()
                                 WITH bu
-                                MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
+                                MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                 MERGE (bu)-[:HAS_ENDPOINT]->(e)
                                 """,
                                 baseurl=base_url, path=path, method=method,
@@ -2641,7 +2828,7 @@ class Neo4jClient:
 
                             session.run(
                                 """
-                                MERGE (p:Parameter {name: $name, position: $position, endpoint_path: $endpoint_path, baseurl: $baseurl})
+                                MERGE (p:Parameter {name: $name, position: $position, endpoint_path: $endpoint_path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                 SET p.user_id = $user_id,
                                     p.project_id = $project_id,
                                     p.type = $param_type,
@@ -2664,8 +2851,8 @@ class Neo4jClient:
                             for method in methods:
                                 session.run(
                                     """
-                                    MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
-                                    MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl})
+                                    MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
+                                    MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                     MERGE (e)-[:HAS_PARAMETER]->(p)
                                     """,
                                     path=path, method=method, baseurl=base_url,
@@ -2685,7 +2872,7 @@ class Neo4jClient:
 
                             session.run(
                                 """
-                                MERGE (p:Parameter {name: $name, position: $position, endpoint_path: $endpoint_path, baseurl: $baseurl})
+                                MERGE (p:Parameter {name: $name, position: $position, endpoint_path: $endpoint_path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                 SET p.user_id = $user_id,
                                     p.project_id = $project_id,
                                     p.type = $param_type,
@@ -2711,8 +2898,8 @@ class Neo4jClient:
                             if 'POST' in methods:
                                 session.run(
                                     """
-                                    MATCH (e:Endpoint {path: $path, method: 'POST', baseurl: $baseurl})
-                                    MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl})
+                                    MATCH (e:Endpoint {path: $path, method: 'POST', baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
+                                    MATCH (p:Parameter {name: $param_name, position: $position, endpoint_path: $path, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                                     MERGE (e)-[:HAS_PARAMETER]->(p)
                                     """,
                                     path=path, baseurl=base_url,
@@ -2776,7 +2963,7 @@ class Neo4jClient:
                 try:
                     session.run(
                         """
-                        MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl})
+                        MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
                         SET e.is_form = true,
                             e.form_enctype = $enctype,
                             e.form_found_at_pages = $found_at_pages,
@@ -2961,11 +3148,11 @@ class Neo4jClient:
         # Remove None values
         tech_props = {k: v for k, v in tech_props.items() if v is not None}
 
-        # Step 1: MERGE the Technology node (same logic as before)
+        # Step 1: MERGE the Technology node (tenant-scoped)
         if version:
             session.run(
                 """
-                MERGE (t:Technology {name: $name, version: $version})
+                MERGE (t:Technology {name: $name, version: $version, user_id: $user_id, project_id: $project_id})
                 ON CREATE SET t += $props,
                               t.detected_by = 'gvm',
                               t.confidence = 100,
@@ -2984,11 +3171,12 @@ class Neo4jClient:
                 cpe=cpe,
                 cpe_vendor=tech.get("cpe_vendor"),
                 cpe_product=tech.get("cpe_product"),
+                user_id=user_id, project_id=project_id,
             )
         else:
             session.run(
                 """
-                MERGE (t:Technology {name: $name})
+                MERGE (t:Technology {name: $name, version: '', user_id: $user_id, project_id: $project_id})
                 ON CREATE SET t += $props,
                               t.detected_by = 'gvm',
                               t.confidence = 100,
@@ -3007,6 +3195,7 @@ class Neo4jClient:
                 cpe=cpe,
                 cpe_vendor=tech.get("cpe_vendor"),
                 cpe_product=tech.get("cpe_product"),
+                user_id=user_id, project_id=project_id,
             )
         stats["technologies_created"] += 1
 
@@ -3023,10 +3212,8 @@ class Neo4jClient:
             # MERGE Port node (may already exist from recon port_scan)
             session.run(
                 """
-                MERGE (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip_addr})
-                SET p.user_id = $user_id,
-                    p.project_id = $project_id,
-                    p.state = 'open',
+                MERGE (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip_addr, user_id: $user_id, project_id: $project_id})
+                SET p.state = 'open',
                     p.updated_at = datetime()
                 """,
                 port_number=port, protocol=effective_protocol, ip_addr=target_ip,
@@ -3038,7 +3225,7 @@ class Neo4jClient:
             session.run(
                 """
                 MATCH (i:IP {address: $ip, user_id: $user_id, project_id: $project_id})
-                MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip})
+                MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip, user_id: $user_id, project_id: $project_id})
                 MERGE (i)-[:HAS_PORT]->(p)
                 """,
                 ip=target_ip, user_id=user_id, project_id=project_id,
@@ -3049,25 +3236,26 @@ class Neo4jClient:
             if version:
                 session.run(
                     """
-                    MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip})
-                    MATCH (t:Technology {name: $name, version: $version})
+                    MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip, user_id: $user_id, project_id: $project_id})
+                    MATCH (t:Technology {name: $name, version: $version, user_id: $user_id, project_id: $project_id})
                     MERGE (p)-[r:USES_TECHNOLOGY]->(t)
                     SET r.detected_by = 'gvm'
                     """,
                     port_number=port, protocol=effective_protocol, ip=target_ip,
                     name=name, version=version,
+                    user_id=user_id, project_id=project_id,
                 )
             else:
                 session.run(
                     """
-                    MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip})
-                    MATCH (t:Technology {name: $name})
-                    WHERE t.version IS NULL
+                    MATCH (p:Port {number: $port_number, protocol: $protocol, ip_address: $ip, user_id: $user_id, project_id: $project_id})
+                    MATCH (t:Technology {name: $name, version: '', user_id: $user_id, project_id: $project_id})
                     MERGE (p)-[r:USES_TECHNOLOGY]->(t)
                     SET r.detected_by = 'gvm'
                     """,
                     port_number=port, protocol=effective_protocol, ip=target_ip,
                     name=name,
+                    user_id=user_id, project_id=project_id,
                 )
             stats["relationships_created"] += 1
         else:
@@ -3078,7 +3266,7 @@ class Neo4jClient:
                 session.run(
                     """
                     MATCH (i:IP {address: $ip, user_id: $user_id, project_id: $project_id})
-                    MATCH (t:Technology {name: $name, version: $version})
+                    MATCH (t:Technology {name: $name, version: $version, user_id: $user_id, project_id: $project_id})
                     MERGE (i)-[r:USES_TECHNOLOGY]->(t)
                     SET r += $rel_props
                     """,
@@ -3089,8 +3277,7 @@ class Neo4jClient:
                 session.run(
                     """
                     MATCH (i:IP {address: $ip, user_id: $user_id, project_id: $project_id})
-                    MATCH (t:Technology {name: $name})
-                    WHERE t.version IS NULL
+                    MATCH (t:Technology {name: $name, version: '', user_id: $user_id, project_id: $project_id})
                     MERGE (i)-[r:USES_TECHNOLOGY]->(t)
                     SET r += $rel_props
                     """,
@@ -3390,7 +3577,7 @@ class Neo4jClient:
                             effective_protocol = port_protocol or "tcp"
                             result = session.run(
                                 """
-                                MATCH (p:Port {number: $port, protocol: $protocol, ip_address: $ip})
+                                MATCH (p:Port {number: $port, protocol: $protocol, ip_address: $ip, user_id: $user_id, project_id: $project_id})
                                       -[:USES_TECHNOLOGY]->(t:Technology)
                                 MATCH (v:Vulnerability {id: $vuln_id})
                                 MERGE (t)-[:HAS_VULNERABILITY]->(v)
@@ -3398,6 +3585,7 @@ class Neo4jClient:
                                 """,
                                 port=target_port, protocol=effective_protocol,
                                 ip=target_ip, vuln_id=vuln_id,
+                                user_id=user_id, project_id=project_id,
                             )
                             record = result.single()
                             if record and record["matched"] > 0:
@@ -3430,13 +3618,14 @@ class Neo4jClient:
                             effective_protocol = port_protocol or "tcp"
                             result = session.run(
                                 """
-                                MATCH (p:Port {number: $port, protocol: $protocol, ip_address: $ip})
+                                MATCH (p:Port {number: $port, protocol: $protocol, ip_address: $ip, user_id: $user_id, project_id: $project_id})
                                 MATCH (v:Vulnerability {id: $vuln_id})
                                 MERGE (p)-[:HAS_VULNERABILITY]->(v)
                                 RETURN p
                                 """,
                                 port=target_port, protocol=effective_protocol,
                                 ip=target_ip, vuln_id=vuln_id,
+                                user_id=user_id, project_id=project_id,
                             )
                             if result.single():
                                 stats["relationships_created"] += 1
@@ -3603,10 +3792,10 @@ class Neo4jClient:
 
                             session.run(
                                 """
-                                MERGE (c:Certificate {subject_cn: $subject_cn, project_id: $project_id})
+                                MERGE (c:Certificate {subject_cn: $subject_cn, user_id: $user_id, project_id: $project_id})
                                 SET c += $props, c.updated_at = datetime()
                                 """,
-                                subject_cn=subject_cn, project_id=project_id, props=cert_props
+                                subject_cn=subject_cn, user_id=user_id, project_id=project_id, props=cert_props
                             )
 
                             # Link to IP node if available
@@ -3614,7 +3803,7 @@ class Neo4jClient:
                                 session.run(
                                     """
                                     MATCH (i:IP {address: $ip, user_id: $uid, project_id: $pid})
-                                    MATCH (c:Certificate {subject_cn: $cn, project_id: $pid})
+                                    MATCH (c:Certificate {subject_cn: $cn, user_id: $uid, project_id: $pid})
                                     MERGE (i)-[:HAS_CERTIFICATE]->(c)
                                     """,
                                     ip=cert_ip, uid=user_id, pid=project_id, cn=subject_cn

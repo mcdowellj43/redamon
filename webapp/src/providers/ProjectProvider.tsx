@@ -7,6 +7,8 @@ export interface ProjectSummary {
   id: string
   name: string
   targetDomain: string
+  ipMode?: boolean
+  targetIps?: string[]
   subdomainList?: string[]
   description?: string
   agentOpenaiModel?: string
@@ -60,6 +62,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               id: project.id,
               name: project.name,
               targetDomain: project.targetDomain,
+              ipMode: project.ipMode,
+              targetIps: project.targetIps,
               subdomainList: project.subdomainList,
               description: project.description,
               agentOpenaiModel: project.agentOpenaiModel,

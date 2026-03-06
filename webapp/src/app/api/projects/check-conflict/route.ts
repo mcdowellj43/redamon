@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 interface ConflictCheckRequest {
   targetDomain: string
   subdomainList: string[]
+  ipMode?: boolean
   excludeProjectId?: string  // For edit mode - exclude current project from check
 }
 
@@ -20,20 +21,29 @@ interface ConflictResult {
   message: string | null
 }
 
+const NO_CONFLICT: ConflictResult = {
+  hasConflict: false,
+  conflictType: null,
+  conflictingProject: null,
+  overlappingSubdomains: [],
+  message: null,
+}
+
 // POST /api/projects/check-conflict - Check if a project would conflict with existing ones
 export async function POST(request: NextRequest): Promise<NextResponse<ConflictResult>> {
   try {
     const body: ConflictCheckRequest = await request.json()
-    const { targetDomain, subdomainList, excludeProjectId } = body
+    const { targetDomain, subdomainList, ipMode, excludeProjectId } = body
 
+    // IP mode: no conflict check needed — tenant-scoped Neo4j constraints
+    // allow the same IP across different projects
+    if (ipMode) {
+      return NextResponse.json(NO_CONFLICT)
+    }
+
+    // Domain mode conflict check
     if (!targetDomain) {
-      return NextResponse.json({
-        hasConflict: false,
-        conflictType: null,
-        conflictingProject: null,
-        overlappingSubdomains: [],
-        message: null,
-      })
+      return NextResponse.json(NO_CONFLICT)
     }
 
     // Normalize domain (lowercase, trim)
@@ -46,6 +56,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConflictR
           equals: normalizedDomain,
           mode: 'insensitive',
         },
+        ipMode: false,
         ...(excludeProjectId ? { id: { not: excludeProjectId } } : {}),
       },
       select: {
@@ -57,14 +68,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConflictR
     })
 
     if (existingProjects.length === 0) {
-      // No conflicts - domain not used by any project
-      return NextResponse.json({
-        hasConflict: false,
-        conflictType: null,
-        conflictingProject: null,
-        overlappingSubdomains: [],
-        message: null,
-      })
+      return NextResponse.json(NO_CONFLICT)
     }
 
     // Normalize new project's subdomain list
@@ -73,7 +77,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConflictR
 
     // Check for conflicts
     for (const existing of existingProjects) {
-      const existingSubdomains = (existing.subdomainList || []).map(s => s.toLowerCase().trim()).filter(Boolean)
+      const existingSubdomains = (existing.subdomainList || []).map((s: string) => s.toLowerCase().trim()).filter(Boolean)
       const isExistingFullScan = existingSubdomains.length === 0
 
       // Case 1: Existing project scans ALL subdomains (full scan)
@@ -112,13 +116,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ConflictR
     }
 
     // No conflicts found
-    return NextResponse.json({
-      hasConflict: false,
-      conflictType: null,
-      conflictingProject: null,
-      overlappingSubdomains: [],
-      message: null,
-    })
+    return NextResponse.json(NO_CONFLICT)
 
   } catch (error) {
     console.error('Failed to check project conflict:', error)

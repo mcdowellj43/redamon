@@ -1,30 +1,26 @@
 """
 Recon Orchestrator API - FastAPI service for managing recon containers
 """
-import asyncio
 import json
 import logging
 import os
+import socket
 from contextlib import asynccontextmanager
-from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+import docker
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
 
 from container_manager import ContainerManager
 from models import (
     HealthResponse,
-    ReconLogEvent,
     ReconStartRequest,
     ReconState,
     ReconStatus,
-    GvmLogEvent,
     GvmStartRequest,
     GvmState,
     GvmStatus,
-    GithubHuntLogEvent,
     GithubHuntStartRequest,
     GithubHuntState,
     GithubHuntStatus,
@@ -37,12 +33,61 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
-RECON_PATH = os.getenv("RECON_PATH", "/home/samuele/Progetti didattici/RedAmon/recon")
+
+def _detect_host_mounts() -> dict[str, str]:
+    """
+    Auto-detect host filesystem paths by inspecting this container's Docker mounts.
+
+    Inside a Docker container the hostname equals the container ID.
+    We use the Docker SDK (via the mounted socket) to inspect our own container
+    and read the Source (host path) for each Destination (container path).
+
+    Returns a dict mapping container_path -> host_path, e.g.:
+        {"/app/recon": "/home/user/project/recon", ...}
+    """
+    try:
+        client = docker.from_env()
+        container = client.containers.get(socket.gethostname())
+        mount_map = {}
+        for mount in container.attrs["Mounts"]:
+            mount_map[mount["Destination"]] = mount["Source"]
+        logger.info(f"Auto-detected host mounts: { {k: v for k, v in mount_map.items() if k.startswith('/app/')} }")
+        return mount_map
+    except Exception as e:
+        logger.warning(f"Could not auto-detect host mounts: {e}")
+        return {}
+
+
+def _get_host_path(mount_map: dict[str, str], container_path: str, env_var: str) -> str:
+    """
+    Resolve a host path: prefer auto-detected mount, fall back to env var.
+
+    Raises RuntimeError if neither source provides a path.
+    """
+    # 1. Auto-detected from own container mounts (works on any machine)
+    if container_path in mount_map:
+        return mount_map[container_path]
+
+    # 2. Explicit env var (no hardcoded default)
+    path = os.getenv(env_var)
+    if path:
+        return path
+
+    raise RuntimeError(
+        f"Cannot determine host path for {container_path}. "
+        f"Either run via docker-compose (auto-detected) or set {env_var} env var."
+    )
+
+
+# Auto-detect host mount paths from this container's own mounts
+_host_mounts = _detect_host_mounts()
+
+# Configuration — resolved dynamically, no hardcoded machine paths
+RECON_PATH = _get_host_path(_host_mounts, "/app/recon", "RECON_PATH")
 RECON_IMAGE = os.getenv("RECON_IMAGE", "redamon-recon:latest")
-GVM_SCAN_PATH = os.getenv("GVM_SCAN_PATH", "/home/samuele/Progetti didattici/RedAmon/gvm_scan")
+GVM_SCAN_PATH = _get_host_path(_host_mounts, "/app/gvm_scan", "GVM_SCAN_PATH")
 GVM_IMAGE = os.getenv("GVM_IMAGE", "redamon-vuln-scanner:latest")
-GITHUB_HUNT_PATH = os.getenv("GITHUB_HUNT_PATH", "/home/samuele/Progetti didattici/RedAmon/github_secret_hunt")
+GITHUB_HUNT_PATH = _get_host_path(_host_mounts, "/app/github_secret_hunt", "GITHUB_HUNT_PATH")
 GITHUB_HUNT_IMAGE = os.getenv("GITHUB_HUNT_IMAGE", "redamon-github-hunter:latest")
 VERSION = "1.0.0"
 
@@ -221,6 +266,26 @@ async def stop_recon(project_id: str):
     return state
 
 
+@app.post("/recon/{project_id}/pause", response_model=ReconState)
+async def pause_recon(project_id: str):
+    """Pause a running recon process"""
+    if not container_manager:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+
+    state = await container_manager.pause_recon(project_id)
+    return state
+
+
+@app.post("/recon/{project_id}/resume", response_model=ReconState)
+async def resume_recon(project_id: str):
+    """Resume a paused recon process"""
+    if not container_manager:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+
+    state = await container_manager.resume_recon(project_id)
+    return state
+
+
 @app.get("/recon/{project_id}/logs")
 async def stream_logs(project_id: str):
     """
@@ -364,14 +429,58 @@ async def delete_project_files(project_id: str):
                 logger.error(f"Failed to delete project file {file_path}: {e}")
 
     # Clean up any running state for this project
-    if container_manager and project_id in container_manager.running_states:
-        del container_manager.running_states[project_id]
+    if container_manager:
+        if project_id in container_manager.running_states:
+            del container_manager.running_states[project_id]
+        if project_id in container_manager.gvm_states:
+            del container_manager.gvm_states[project_id]
+        if project_id in container_manager.github_hunt_states:
+            del container_manager.github_hunt_states[project_id]
 
     return {
         "success": len(errors) == 0,
         "deleted": deleted_files,
         "errors": errors,
     }
+
+
+@app.post("/project/{project_id}/artifacts/{artifact_type}")
+async def upload_artifact(project_id: str, artifact_type: str, file: UploadFile):
+    """
+    Upload a scan output artifact (recon, gvm, github_hunt) for a project.
+
+    Used by the import feature to restore scan output JSON files.
+    """
+    from pathlib import Path
+
+    ALLOWED_TYPES = {
+        "recon": Path("/app/recon/output") / f"recon_{project_id}.json",
+        "gvm": Path("/app/gvm_scan/output") / f"gvm_{project_id}.json",
+        "github_hunt": Path("/app/github_secret_hunt/output") / f"github_hunt_{project_id}.json",
+    }
+
+    if artifact_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid artifact type: {artifact_type}. Allowed: {list(ALLOWED_TYPES.keys())}",
+        )
+
+    target_path = ALLOWED_TYPES[artifact_type]
+
+    try:
+        content = await file.read()
+        # Validate it's valid JSON
+        json.loads(content)
+        # Ensure parent directory exists
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(content)
+        logger.info(f"Uploaded {artifact_type} artifact for project {project_id}: {target_path}")
+        return {"success": True, "path": str(target_path), "size": len(content)}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Uploaded file is not valid JSON")
+    except Exception as e:
+        logger.error(f"Failed to upload artifact: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =============================================================================
@@ -430,6 +539,26 @@ async def stop_gvm_scan(project_id: str):
         raise HTTPException(status_code=503, detail="Service not initialized")
 
     state = await container_manager.stop_gvm_scan(project_id)
+    return state
+
+
+@app.post("/gvm/{project_id}/pause", response_model=GvmState)
+async def pause_gvm_scan(project_id: str):
+    """Pause a running GVM scan process"""
+    if not container_manager:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+
+    state = await container_manager.pause_gvm_scan(project_id)
+    return state
+
+
+@app.post("/gvm/{project_id}/resume", response_model=GvmState)
+async def resume_gvm_scan(project_id: str):
+    """Resume a paused GVM scan process"""
+    if not container_manager:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+
+    state = await container_manager.resume_gvm_scan(project_id)
     return state
 
 
@@ -534,6 +663,26 @@ async def stop_github_hunt(project_id: str):
         raise HTTPException(status_code=503, detail="Service not initialized")
 
     state = await container_manager.stop_github_hunt(project_id)
+    return state
+
+
+@app.post("/github-hunt/{project_id}/pause", response_model=GithubHuntState)
+async def pause_github_hunt(project_id: str):
+    """Pause a running GitHub Secret Hunt process"""
+    if not container_manager:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+
+    state = await container_manager.pause_github_hunt(project_id)
+    return state
+
+
+@app.post("/github-hunt/{project_id}/resume", response_model=GithubHuntState)
+async def resume_github_hunt(project_id: str):
+    """Resume a paused GitHub Secret Hunt process"""
+    if not container_manager:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+
+    state = await container_manager.resume_github_hunt(project_id)
     return state
 
 

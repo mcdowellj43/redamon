@@ -349,7 +349,7 @@ export function HttpxSection({ data, updateField }: HttpxSectionProps) {
               <label className={styles.fieldLabel}>Additional Paths to Probe</label>
               <textarea
                 className="textarea"
-                value={data.httpxPaths.join('\n')}
+                value={(data.httpxPaths ?? []).join('\n')}
                 onChange={(e) => updateField('httpxPaths', e.target.value.split('\n').filter(Boolean))}
                 placeholder="/robots.txt&#10;/.well-known/security.txt&#10;/sitemap.xml"
                 rows={3}
@@ -360,7 +360,7 @@ export function HttpxSection({ data, updateField }: HttpxSectionProps) {
               <label className={styles.fieldLabel}>Custom Headers</label>
               <textarea
                 className="textarea"
-                value={data.httpxCustomHeaders.join('\n')}
+                value={(data.httpxCustomHeaders ?? []).join('\n')}
                 onChange={(e) => updateField('httpxCustomHeaders', e.target.value.split('\n').filter(Boolean))}
                 placeholder="User-Agent: CustomAgent/1.0&#10;Authorization: Bearer token"
                 rows={3}
@@ -376,7 +376,7 @@ export function HttpxSection({ data, updateField }: HttpxSectionProps) {
               <input
                 type="text"
                 className="textInput"
-                value={data.httpxMatchCodes.join(', ')}
+                value={(data.httpxMatchCodes ?? []).join(', ')}
                 onChange={(e) => updateField('httpxMatchCodes', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                 placeholder="200, 301, 302 (empty = all)"
               />
@@ -387,7 +387,7 @@ export function HttpxSection({ data, updateField }: HttpxSectionProps) {
               <input
                 type="text"
                 className="textInput"
-                value={data.httpxFilterCodes.join(', ')}
+                value={(data.httpxFilterCodes ?? []).join(', ')}
                 onChange={(e) => updateField('httpxFilterCodes', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                 placeholder="404, 503"
               />

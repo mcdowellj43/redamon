@@ -6,9 +6,11 @@ LABEL description="Kali Linux sandbox with MCP servers for agentic penetration t
 # Avoid prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Update CA certificates and configure HTTPS mirror
-# The base image should have ca-certificates, we just need to update them
-RUN apt-get update -o Acquire::https::Verify-Peer=false \
+# Bootstrap CA certificates using the direct CDN mirror over HTTP first,
+# then upgrade to HTTPS once ca-certificates is installed.
+# This avoids the unreliable http.kali.org redirector that causes 403/timeout errors.
+RUN echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && update-ca-certificates \
     && echo "deb https://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
@@ -38,6 +40,8 @@ RUN apt-get install -y --fix-missing \
     # Exploitation & post-exploitation
     exploitdb \
     john \
+    hydra \
+    sshpass \
     smbclient \
     sqlmap \
     jq \
@@ -90,8 +94,20 @@ RUN chmod +x /opt/entrypoint.sh
 
 WORKDIR /opt/mcp_servers
 
-# Expose ports for MCP servers (SSE/HTTP transport)
-EXPOSE 8000 8002 8003 8004
+# Install ngrok (for optional single-port TCP tunneling of reverse shells)
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -sSL "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-${ARCH}.tgz" \
+    | tar -xz -C /usr/local/bin
+
+# Install chisel (for optional multi-port TCP tunneling — reverse shells + web delivery)
+RUN CHISEL_VERSION="1.11.4" && \
+    ARCH=$(dpkg --print-architecture) && \
+    curl -sSL "https://github.com/jpillora/chisel/releases/download/v${CHISEL_VERSION}/chisel_${CHISEL_VERSION}_linux_${ARCH}.gz" \
+    | gunzip > /usr/local/bin/chisel && \
+    chmod +x /usr/local/bin/chisel
+
+# Expose ports for MCP servers (SSE/HTTP transport) + ngrok API
+EXPOSE 8000 8002 8003 8004 8014 4040
 
 # Initialize Metasploit database (speeds up first run)
 RUN msfdb init || true

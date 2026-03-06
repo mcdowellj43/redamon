@@ -12,6 +12,7 @@ import glob
 import json
 import time
 import dns.resolver
+import dns.reversename
 from pathlib import Path
 from datetime import datetime
 import sys
@@ -382,7 +383,36 @@ def discover_subdomains(domain: str, anonymous: bool = False, bruteforce: bool =
     
     if anonymous and session:
         session.close()
-    
+
     return result
 
+
+def reverse_dns_lookup(ip_address: str, max_retries: int = 3):
+    """
+    Perform reverse DNS (PTR) lookup for an IP address.
+
+    Args:
+        ip_address: IPv4 or IPv6 address string
+        max_retries: Number of retry attempts
+
+    Returns:
+        Hostname string if PTR record found, None otherwise
+    """
+    for attempt in range(max_retries):
+        try:
+            rev_name = dns.reversename.from_address(ip_address)
+            answers = dns.resolver.resolve(rev_name, 'PTR')
+            # Return first PTR record, strip trailing dot
+            hostname = str(answers[0]).rstrip('.')
+            return hostname
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+            return None
+        except dns.resolver.LifetimeTimeout:
+            if attempt < max_retries - 1:
+                time.sleep(1)
+                continue
+            return None
+        except Exception:
+            return None
+    return None
 

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Save, X, Loader2, AlertTriangle } from 'lucide-react'
+import { Save, X, Loader2, AlertTriangle, Download } from 'lucide-react'
 import type { Project } from '@prisma/client'
+import { validateProjectForm } from '@/lib/validation'
 import styles from './ProjectForm.module.css'
 
 // Import sections
@@ -20,8 +21,10 @@ import { SecurityChecksSection } from './sections/SecurityChecksSection'
 import { GithubSection } from './sections/GithubSection'
 import { AgentBehaviourSection } from './sections/AgentBehaviourSection'
 import { CveExploitSection } from './sections/CveExploitSection'
-import { BruteForceSection } from './sections/BruteForceSection'
+import { HydraSection } from './sections/BruteForceSection'
+import { PhishingSection } from './sections/PhishingSection'
 import { GvmScanSection } from './sections/GvmScanSection'
+import { CypherFixSettingsSection } from './sections/CypherFixSettingsSection'
 
 type ProjectFormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
 
@@ -58,6 +61,7 @@ const TABS = [
   { id: 'integrations', label: 'Integrations' },
   { id: 'agent', label: 'Agent Behaviour' },
   { id: 'attack', label: 'Attack Paths' },
+  { id: 'cypherfix', label: 'CypherFix' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -69,6 +73,8 @@ const MINIMAL_DEFAULTS: Partial<ProjectFormData> = {
   description: '',
   targetDomain: '',
   subdomainList: [],
+  ipMode: false,
+  targetIps: [],
   scanModules: ['domain_discovery', 'port_scan', 'http_probe', 'resource_enum', 'vuln_scan'],
 }
 
@@ -110,9 +116,15 @@ export function ProjectForm({
   // Extract project ID for edit mode (to exclude from conflict check)
   const projectId = (initialData as { id?: string } | undefined)?.id
 
-  // Check for domain conflicts when targetDomain or subdomainList changes
-  const checkConflict = useCallback(async (targetDomain: string, subdomainList: string[]) => {
-    if (!targetDomain.trim()) {
+  // Check for domain conflicts (IP mode skips — tenant-scoped constraints allow overlap)
+  const checkConflict = useCallback(async () => {
+    // No conflict check needed for IP mode
+    if (formData.ipMode) {
+      setConflict(null)
+      return
+    }
+
+    if (!(formData.targetDomain || '').trim()) {
       setConflict(null)
       return
     }
@@ -123,8 +135,9 @@ export function ProjectForm({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          targetDomain,
-          subdomainList,
+          targetDomain: formData.targetDomain || '',
+          subdomainList: formData.subdomainList || [],
+          ipMode: false,
           excludeProjectId: mode === 'edit' ? projectId : undefined,
         }),
       })
@@ -138,16 +151,16 @@ export function ProjectForm({
     } finally {
       setIsCheckingConflict(false)
     }
-  }, [mode, projectId])
+  }, [formData.targetDomain, formData.subdomainList, formData.ipMode, mode, projectId])
 
   // Debounced conflict check when form data changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      checkConflict(formData.targetDomain || '', formData.subdomainList || [])
-    }, 500) // 500ms debounce
+      checkConflict()
+    }, 500)
 
     return () => clearTimeout(timer)
-  }, [formData.targetDomain, formData.subdomainList, checkConflict])
+  }, [checkConflict])
 
   // Fetch defaults from backend on mount (only for create mode)
   useEffect(() => {
@@ -174,12 +187,19 @@ export function ProjectForm({
       return
     }
 
-    if (!formData.targetDomain.trim()) {
+    if (!formData.ipMode && !formData.targetDomain.trim()) {
       alert('Target domain is required')
       return
     }
 
-    // Block submission if there's a domain conflict
+    // Run field validation
+    const validationErrors = validateProjectForm(formData as unknown as Record<string, unknown>)
+    if (validationErrors.length > 0) {
+      alert('Validation errors:\n' + validationErrors.map(e => `- ${e.message}`).join('\n'))
+      return
+    }
+
+    // Block submission if there's a conflict
     if (conflict?.hasConflict) {
       alert('Cannot save project: ' + conflict.message)
       return
@@ -207,6 +227,16 @@ export function ProjectForm({
             <X size={14} />
             Cancel
           </button>
+          {mode === 'edit' && projectId && (
+            <button
+              type="button"
+              className="secondaryButton"
+              onClick={() => window.open(`/api/projects/${projectId}/export`)}
+            >
+              <Download size={14} />
+              Export
+            </button>
+          )}
           <button
             type="submit"
             className="primaryButton"
@@ -274,7 +304,7 @@ export function ProjectForm({
           <div className={styles.content}>
             {activeTab === 'target' && (
           <>
-            <TargetSection data={formData} updateField={updateField} />
+            <TargetSection data={formData} updateField={updateField} mode={mode} />
             <ScanModulesSection data={formData} updateField={updateField} />
           </>
         )}
@@ -325,8 +355,13 @@ export function ProjectForm({
         {activeTab === 'attack' && (
           <>
             <CveExploitSection data={formData} updateField={updateField} />
-            <BruteForceSection data={formData} updateField={updateField} />
+            <HydraSection data={formData} updateField={updateField} />
+            <PhishingSection data={formData} updateField={updateField} />
           </>
+        )}
+
+        {activeTab === 'cypherfix' && (
+          <CypherFixSettingsSection data={formData} updateField={updateField} />
         )}
           </div>
         </>

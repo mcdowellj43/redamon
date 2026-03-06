@@ -1,0 +1,189 @@
+.tabBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-3);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+  height: 32px;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 100%;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-1) var(--space-3);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+  height: 100%;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text-secondary);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.tabActive {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  font-size: 9px;
+  font-weight: var(--font-semibold);
+  line-height: 1;
+}
+
+/* Table controls (right side) */
+
+.tableControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.searchWrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 2px var(--space-2);
+  width: 160px;
+  transition: border-color 0.15s ease;
+}
+
+.searchWrapper:focus-within {
+  border-color: var(--accent-primary);
+}
+
+.searchIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  width: 100%;
+}
+
+.searchInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.rowCount {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.exportBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.exportBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Right section (tunnel badges + table controls) */
+
+.rightSection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 100%;
+  margin-left: auto;
+}
+
+/* Tunnel status badges */
+
+.tunnelBadges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.tunnelBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-2);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: var(--font-medium);
+  white-space: nowrap;
+}
+
+.tunnelDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+}
+
+.tunnelName {
+  font-size: 10px;
+}
+
+.tunnelSep {
+  color: var(--border-default);
+  font-size: 10px;
+}
+
+.tunnelHost {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}

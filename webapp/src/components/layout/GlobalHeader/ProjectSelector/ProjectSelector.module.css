@@ -2,6 +2,37 @@
   position: relative;
 }
 
+.triggerGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.settingsIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: var(--transition-all);
+}
+
+.settingsIconButton:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+}
+
+.settingsIconButton:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
 .trigger {
   display: flex;
   align-items: center;

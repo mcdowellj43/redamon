@@ -8,12 +8,13 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  name      String
-  email     String    @unique
-  projects  Project[]
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  projects      Project[]
+  conversations Conversation[]
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
 
   @@map("users")
 }
@@ -27,9 +28,13 @@ model Project {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  conversations               Conversation[]
+
   // ========== TARGET CONFIGURATION ==========
   targetDomain                String   @default("") @map("target_domain")
   subdomainList               String[] @default([]) @map("subdomain_list")
+  ipMode                      Boolean  @default(false) @map("ip_mode")
+  targetIps                   String[] @default([]) @map("target_ips")
   verifyDomainOwnership       Boolean  @default(false) @map("verify_domain_ownership")
   ownershipToken              String   @default("your-secret-token-here") @map("ownership_token")
   ownershipTxtPrefix          String   @default("_redamon-verify") @map("ownership_txt_prefix")
@@ -284,6 +289,8 @@ model Project {
   agentLport                            Int?     @map("agent_lport")
   agentBindPortOnTarget                 Int?     @map("agent_bind_port_on_target")
   agentPayloadUseHttps                  Boolean  @default(false) @map("agent_payload_use_https")
+  agentNgrokTunnelEnabled               Boolean  @default(false) @map("agent_ngrok_tunnel_enabled")
+  agentChiselTunnelEnabled              Boolean  @default(false) @map("agent_chisel_tunnel_enabled")
   agentMaxIterations                    Int      @default(100) @map("agent_max_iterations")
   agentExecutionTraceMemorySteps        Int      @default(100) @map("agent_execution_trace_memory_steps")
   agentRequireApprovalForExploitation   Boolean  @default(true) @map("agent_require_approval_for_exploitation")
@@ -294,9 +301,118 @@ model Project {
   agentCreateGraphImageOnInit           Boolean  @default(false) @map("agent_create_graph_image_on_init")
   agentLogMaxMb                         Int      @default(10) @map("agent_log_max_mb")
   agentLogBackupCount                   Int      @default(5) @map("agent_log_backup_count")
-  agentToolPhaseMap                     Json     @default("{\"query_graph\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"web_search\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_curl\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_naabu\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_nmap\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_nuclei\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"kali_shell\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_code\":[\"exploitation\",\"post_exploitation\"],\"metasploit_console\":[\"exploitation\",\"post_exploitation\"],\"msf_restart\":[\"exploitation\",\"post_exploitation\"]}") @map("agent_tool_phase_map")
+  agentToolPhaseMap                     Json     @default("{\"query_graph\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"web_search\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_curl\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_naabu\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_nmap\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_nuclei\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"kali_shell\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_code\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_hydra\":[\"exploitation\",\"post_exploitation\"],\"metasploit_console\":[\"exploitation\",\"post_exploitation\"],\"msf_restart\":[\"exploitation\",\"post_exploitation\"]}") @map("agent_tool_phase_map")
   agentBruteForceMaxWordlistAttempts    Int      @default(3) @map("agent_brute_force_max_wordlist_attempts")
   agentBruteforceSpeed                  Int      @default(5) @map("agent_bruteforce_speed")
 
+  // Hydra Brute Force Settings
+  hydraEnabled                          Boolean  @default(true) @map("hydra_enabled")
+  hydraThreads                          Int      @default(16) @map("hydra_threads")
+  hydraWaitBetweenConnections           Int      @default(0) @map("hydra_wait_between_connections")
+  hydraConnectionTimeout                Int      @default(32) @map("hydra_connection_timeout")
+  hydraStopOnFirstFound                 Boolean  @default(true) @map("hydra_stop_on_first_found")
+  hydraExtraChecks                      String   @default("nsr") @map("hydra_extra_checks")
+  hydraVerbose                          Boolean  @default(true) @map("hydra_verbose")
+  hydraMaxWordlistAttempts              Int      @default(3) @map("hydra_max_wordlist_attempts")
+
+  // ========== PHISHING / SOCIAL ENGINEERING SETTINGS ==========
+  phishingSmtpConfig                    String   @default("") @map("phishing_smtp_config")
+
+  // ========== CYPHERFIX SETTINGS ==========
+  cypherfixGithubToken              String   @default("") @map("cypherfix_github_token")
+  cypherfixDefaultRepo              String   @default("") @map("cypherfix_default_repo")
+  cypherfixDefaultBranch            String   @default("main") @map("cypherfix_default_branch")
+  cypherfixBranchPrefix             String   @default("cypherfix/") @map("cypherfix_branch_prefix")
+  cypherfixRequireApproval          Boolean  @default(true) @map("cypherfix_require_approval")
+  cypherfixLlmModel                 String   @default("") @map("cypherfix_llm_model")
+
+  remediations                      Remediation[]
+
   @@map("projects")
+}
+
+model Conversation {
+  id             String        @id @default(cuid())
+  projectId      String        @map("project_id")
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId         String        @map("user_id")
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId      String        @unique @map("session_id")
+  title          String        @default("")
+  status         String        @default("active")
+  agentRunning   Boolean       @default(false) @map("agent_running")
+  currentPhase   String        @default("informational") @map("current_phase")
+  iterationCount Int           @default(0) @map("iteration_count")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  messages       ChatMessage[]
+
+  @@index([projectId, userId])
+  @@map("conversations")
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sequenceNum    Int          @map("sequence_num")
+  type           String
+  data           Json
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([conversationId, sequenceNum])
+  @@map("chat_messages")
+}
+
+model Remediation {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // ── Core info ──
+  title             String
+  description       String   @db.Text
+  severity          String   @default("medium")
+  priority          Int      @default(0)
+  category          String   @default("vulnerability")
+  remediationType   String   @default("code_fix") @map("remediation_type")
+
+  // ── Vulnerability evidence ──
+  affectedAssets    Json     @default("[]") @map("affected_assets")
+  cvssScore         Float?   @map("cvss_score")
+  cveIds            String[] @default([]) @map("cve_ids")
+  cweIds            String[] @default([]) @map("cwe_ids")
+  capecIds          String[] @default([]) @map("capec_ids")
+  evidence          String   @default("") @db.Text
+  attackChainPath   String   @default("") @map("attack_chain_path") @db.Text
+  exploitAvailable  Boolean  @default(false) @map("exploit_available")
+  cisaKev           Boolean  @default(false) @map("cisa_kev")
+
+  // ── Remediation details ──
+  solution          String   @default("") @db.Text
+  fixComplexity     String   @default("medium") @map("fix_complexity")
+  estimatedFiles    Int      @default(0) @map("estimated_files")
+
+  // ── GitHub integration ──
+  targetRepo        String   @default("") @map("target_repo")
+  targetBranch      String   @default("main") @map("target_branch")
+  fixBranch         String   @default("") @map("fix_branch")
+  prUrl             String   @default("") @map("pr_url")
+  prStatus          String   @default("none") @map("pr_status")
+
+  // ── Status tracking ──
+  status            String   @default("pending")
+  agentSessionId    String   @default("") @map("agent_session_id")
+  agentNotes        String   @default("") @map("agent_notes") @db.Text
+
+  // ── File changes (populated by CodeFix agent) ──
+  fileChanges       Json     @default("[]") @map("file_changes")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, status])
+  @@index([projectId, severity])
+  @@index([projectId, priority])
+  @@map("remediations")
 }

@@ -91,7 +91,7 @@ class MCPToolsManager:
         # - sse_read_timeout: How long to wait for SSE events (default 300s = 5 min)
         # Metasploit needs longer timeouts for brute force attacks (30 min for large wordlists)
         server_configs = [
-            ("network_recon", self.network_recon_url, 60, 600),   # curl+naabu+command, 10 min read
+            ("network_recon", self.network_recon_url, 60, 1800),  # curl+naabu+hydra+command, 30 min read (hydra needs up to 30 min)
             ("nmap", self.nmap_url, 60, 600),                     # 10 min read
             ("metasploit", self.metasploit_url, 60, 1800),        # 30 min read
             ("nuclei", self.nuclei_url, 60, 600),                 # 10 min read
@@ -635,13 +635,15 @@ class PhaseAwareToolExecutor:
         tool_args: dict,
         phase: str,
         progress_callback: Callable[[str, str, bool], Awaitable[None]],
-        poll_interval: float = 5.0
+        poll_interval: float = 5.0,
+        progress_url: str | None = None
     ) -> dict:
         """
-        Execute metasploit_console with integrated progress streaming.
+        Execute a long-running tool with integrated progress streaming.
 
         Polls the HTTP progress endpoint during execution and sends updates
-        via the progress_callback.
+        via the progress_callback. Works with any tool that exposes a
+        /progress HTTP endpoint (Metasploit on 8013, Hydra on 8014).
 
         Args:
             tool_name: Name of the tool to execute
@@ -649,6 +651,7 @@ class PhaseAwareToolExecutor:
             phase: Current agent phase
             progress_callback: Async callback(tool_name, chunk, is_final)
             poll_interval: How often to poll for progress (seconds)
+            progress_url: HTTP URL for progress endpoint. Defaults to Metasploit's.
 
         Returns:
             dict with 'success', 'output', and optionally 'error'
@@ -661,6 +664,11 @@ class PhaseAwareToolExecutor:
         last_line_count = 0
         last_output = ""
 
+        url = progress_url or os.environ.get(
+            'MCP_METASPLOIT_PROGRESS_URL',
+            'http://host.docker.internal:8013/progress'
+        )
+
         async with httpx.AsyncClient(timeout=2.0) as client:
             while not execution_task.done():
                 await asyncio.sleep(poll_interval)
@@ -669,7 +677,7 @@ class PhaseAwareToolExecutor:
                     break
 
                 try:
-                    resp = await client.get(os.environ.get('MCP_METASPLOIT_PROGRESS_URL', 'http://host.docker.internal:8013/progress'))
+                    resp = await client.get(url)
                     if resp.status_code == 200:
                         progress = resp.json()
 

@@ -17,3 +17,12 @@ uvicorn>=0.24.0
 
 # Utility libraries
 pydantic>=2.0.0
+
+# Common libraries for execute_code scripts
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+pycryptodome>=3.19.0
+PyJWT>=2.8.0
+paramiko>=3.4.0
+impacket>=0.11.0
+pwntools>=4.11.0

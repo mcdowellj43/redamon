@@ -20,7 +20,7 @@ export function NucleiSection({ data, updateField }: NucleiSectionProps) {
   const [isOpen, setIsOpen] = useState(true)
 
   const toggleSeverity = (severity: string) => {
-    const current = data.nucleiSeverity
+    const current = data.nucleiSeverity ?? []
     if (current.includes(severity)) {
       updateField('nucleiSeverity', current.filter(s => s !== severity))
     } else {
@@ -56,7 +56,7 @@ export function NucleiSection({ data, updateField }: NucleiSectionProps) {
                   <input
                     type="checkbox"
                     className="checkbox"
-                    checked={data.nucleiSeverity.includes(severity)}
+                    checked={(data.nucleiSeverity ?? []).includes(severity)}
                     onChange={() => toggleSeverity(severity)}
                   />
                   {severity.charAt(0).toUpperCase() + severity.slice(1)}
@@ -149,7 +149,7 @@ export function NucleiSection({ data, updateField }: NucleiSectionProps) {
               <input
                 type="text"
                 className="textInput"
-                value={data.nucleiTemplates.join(', ')}
+                value={(data.nucleiTemplates ?? []).join(', ')}
                 onChange={(e) => updateField('nucleiTemplates', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                 placeholder="cves, vulnerabilities, misconfig (empty = all)"
               />
@@ -160,7 +160,7 @@ export function NucleiSection({ data, updateField }: NucleiSectionProps) {
               <input
                 type="text"
                 className="textInput"
-                value={data.nucleiExcludeTemplates.join(', ')}
+                value={(data.nucleiExcludeTemplates ?? []).join(', ')}
                 onChange={(e) => updateField('nucleiExcludeTemplates', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                 placeholder="http/vulnerabilities/generic/"
               />
@@ -170,7 +170,7 @@ export function NucleiSection({ data, updateField }: NucleiSectionProps) {
               <label className={styles.fieldLabel}>Custom Template Paths</label>
               <textarea
                 className="textarea"
-                value={data.nucleiCustomTemplates.join('\n')}
+                value={(data.nucleiCustomTemplates ?? []).join('\n')}
                 onChange={(e) => updateField('nucleiCustomTemplates', e.target.value.split('\n').filter(Boolean))}
                 placeholder="/path/to/custom-templates&#10;~/my-nuclei-templates"
                 rows={2}
@@ -188,7 +188,7 @@ export function NucleiSection({ data, updateField }: NucleiSectionProps) {
                 <input
                   type="text"
                   className="textInput"
-                  value={data.nucleiTags.join(', ')}
+                  value={(data.nucleiTags ?? []).join(', ')}
                   onChange={(e) => updateField('nucleiTags', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                   placeholder="cve, xss, sqli, rce (empty = all)"
                 />
@@ -199,7 +199,7 @@ export function NucleiSection({ data, updateField }: NucleiSectionProps) {
                 <input
                   type="text"
                   className="textInput"
-                  value={data.nucleiExcludeTags.join(', ')}
+                  value={(data.nucleiExcludeTags ?? []).join(', ')}
                   onChange={(e) => updateField('nucleiExcludeTags', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                   placeholder="dos, fuzz"
                 />

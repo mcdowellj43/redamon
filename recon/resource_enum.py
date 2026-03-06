@@ -103,8 +103,9 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     KATANA_CUSTOM_HEADERS = settings.get('KATANA_CUSTOM_HEADERS', [])
     KATANA_EXCLUDE_PATTERNS = settings.get('KATANA_EXCLUDE_PATTERNS', [])
 
-    # GAU settings
-    GAU_ENABLED = settings.get('GAU_ENABLED', False)
+    # GAU settings - disable in IP mode (archives index by domain, not IP)
+    ip_mode = recon_data.get("metadata", {}).get("ip_mode", False)
+    GAU_ENABLED = False if ip_mode else settings.get('GAU_ENABLED', False)
     GAU_DOCKER_IMAGE = settings.get('GAU_DOCKER_IMAGE', 'sxcurity/gau:latest')
     GAU_PROVIDERS = settings.get('GAU_PROVIDERS', ['wayback', 'commoncrawl', 'otx', 'urlscan'])
     GAU_THREADS = settings.get('GAU_THREADS', 2)

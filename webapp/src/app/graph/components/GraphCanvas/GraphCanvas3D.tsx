@@ -4,13 +4,13 @@ import { useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { GraphData, GraphNode, GraphLink } from '../../types'
 import { getNodeColor, getNodeSize, getGlowLevel } from '../../utils'
-import { getLinkColor, getLinkWidth3D, getParticleCount } from '../../utils/linkHelpers'
+import { getLinkColor, getLinkWidth3D, getParticleCount, getParticleWidth, getParticleColor, getParticleSpeed } from '../../utils/linkHelpers'
 import {
-  LINK_COLORS,
   LINK_SIZES,
   BASE_SIZES,
   BACKGROUND_COLORS,
   SELECTION_COLORS,
+  CHAIN_SESSION_COLORS,
   ANIMATION_CONFIG,
   THREE_CONFIG,
 } from '../../config'
@@ -29,6 +29,7 @@ interface GraphCanvas3DProps {
   selectedNode: GraphNode | null
   onNodeClick: (node: GraphNode) => void
   isDark?: boolean
+  activeChainId?: string
 }
 
 export function GraphCanvas3D({
@@ -39,6 +40,7 @@ export function GraphCanvas3D({
   selectedNode,
   onNodeClick,
   isDark = true,
+  activeChainId,
 }: GraphCanvas3DProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graph3DRef = useRef<any>(null)
@@ -87,8 +89,9 @@ export function GraphCanvas3D({
       linkColor={(link) => getLinkColor(link as GraphLink, selectedNodeId)}
       linkWidth={(link) => getLinkWidth3D(link as GraphLink, selectedNodeId)}
       linkDirectionalParticles={(link) => getParticleCount(link as GraphLink, selectedNodeId)}
-      linkDirectionalParticleWidth={LINK_SIZES.particleWidth}
-      linkDirectionalParticleColor={() => LINK_COLORS.particle}
+      linkDirectionalParticleWidth={(link) => getParticleWidth(link as GraphLink, selectedNodeId)}
+      linkDirectionalParticleColor={(link) => getParticleColor(link as GraphLink)}
+      linkDirectionalParticleSpeed={(link) => getParticleSpeed(link as GraphLink)}
       linkDirectionalArrowLength={LINK_SIZES.arrowLength3D}
       linkDirectionalArrowRelPos={1}
       backgroundColor={isDark ? BACKGROUND_COLORS.dark.graph : BACKGROUND_COLORS.light.graph}
@@ -124,8 +127,42 @@ export function GraphCanvas3D({
           group.add(selectRing)
         }
 
+        // Determine chain membership and effective color
+        const isExploit = graphNode.type === 'ExploitGvm' || graphNode.type === 'ChainFinding'
+        const isChainNode = graphNode.type === 'AttackChain' || graphNode.type === 'ChainStep' || graphNode.type === 'ChainDecision' || graphNode.type === 'ChainFailure'
+        const isInActiveChain = isChainNode && !!activeChainId && graphNode.properties?.chain_id === activeChainId
+        const isExploitInActiveChain = isExploit && !!activeChainId && graphNode.properties?.chain_id === activeChainId
+        const isActiveChain = graphNode.type === 'AttackChain' && isInActiveChain
+        // Inactive chain nodes: grey by default, orange when selected
+        const effectiveColor = (isChainNode || isExploit) && !isInActiveChain && !isExploitInActiveChain
+          ? (isSelected ? CHAIN_SESSION_COLORS.inactiveSelected : CHAIN_SESSION_COLORS.inactive)
+          : nodeColor
+
+        // Add active-session marker ring (yellow, dashed) on matching AttackChain
+        if (isActiveChain) {
+          const activeGeometry = new THREE.RingGeometry(
+            sphereSize * 1.8,
+            sphereSize * 2.0,
+            6 // hexagonal ring
+          )
+          const activeMaterial = new THREE.MeshBasicMaterial({
+            color: CHAIN_SESSION_COLORS.activeRing, // yellow
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide,
+          })
+          const activeRing = new THREE.Mesh(activeGeometry, activeMaterial)
+          activeRing.lookAt(0, 0, 1)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(activeRing as any).__isActiveChainRing = true
+          ;(activeRing as any).__glowLevel = 'high'
+          glowRingsRef.current.push(activeRing)
+          group.add(activeRing)
+        }
+
         // Add outer glow ring for high/critical severity
         const glowLevel = getGlowLevel(graphNode)
+        const glowColor = (isChainNode || isExploit) ? effectiveColor : nodeColor
         if (glowLevel) {
           const glowGeometry = new THREE.RingGeometry(
             sphereSize * THREE_CONFIG.glowRingScale.inner,
@@ -133,7 +170,7 @@ export function GraphCanvas3D({
             THREE_CONFIG.ringSegments
           )
           const glowMaterial = new THREE.MeshBasicMaterial({
-            color: nodeColor,
+            color: glowColor,
             transparent: true,
             opacity: THREE_CONFIG.glowRingOpacity,
             side: THREE.DoubleSide,
@@ -150,17 +187,24 @@ export function GraphCanvas3D({
           group.add(glowRing)
         }
 
-        // Use OctahedronGeometry (3D diamond) for Exploit nodes, SphereGeometry for all others
-        const isExploit = graphNode.type === 'Exploit' || graphNode.type === 'ExploitGvm'
-        const geometry = isExploit
-          ? new THREE.OctahedronGeometry(sphereSize * 1.2)
-          : new THREE.SphereGeometry(sphereSize, THREE_CONFIG.sphereSegments, THREE_CONFIG.sphereSegments)
-        const material = isExploit
+        // Choose geometry based on node type
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let geometry: any
+        if (isExploit) {
+          geometry = new THREE.OctahedronGeometry(sphereSize * 1.2)
+        } else if (isChainNode) {
+          geometry = new THREE.DodecahedronGeometry(sphereSize * 1.1)
+        } else {
+          geometry = new THREE.SphereGeometry(sphereSize, THREE_CONFIG.sphereSegments, THREE_CONFIG.sphereSegments)
+        }
+
+        const isSpecialNode = isExploit || isChainNode
+        const material = isSpecialNode
           ? new THREE.MeshLambertMaterial({
-              color: nodeColor,
+              color: effectiveColor,
               transparent: true,
               opacity: 0.12,
-              emissive: nodeColor,
+              emissive: effectiveColor,
               emissiveIntensity: 0.3,
               side: THREE.DoubleSide,
             })
@@ -172,10 +216,10 @@ export function GraphCanvas3D({
         const mesh = new THREE.Mesh(geometry, material)
         group.add(mesh)
 
-        // Add wireframe overlay for Exploit nodes
+        // Add wireframe overlay for exploit nodes
         if (isExploit) {
           const wireMaterial = new THREE.MeshBasicMaterial({
-            color: nodeColor,
+            color: effectiveColor,
             wireframe: true,
             transparent: true,
             opacity: 0.6,
@@ -184,10 +228,22 @@ export function GraphCanvas3D({
           group.add(wireMesh)
         }
 
+        // Add clean edge outline for chain nodes (only polygon edges, no triangulation)
+        if (isChainNode) {
+          const edges = new THREE.EdgesGeometry(geometry, 15)
+          const lineMaterial = new THREE.LineBasicMaterial({
+            color: effectiveColor,
+            transparent: true,
+            opacity: 0.7,
+          })
+          const lineSegments = new THREE.LineSegments(edges, lineMaterial)
+          group.add(lineSegments)
+        }
+
         // Create label if enabled or if node is selected
         if (showLabels || isSelected) {
           const sprite = new SpriteText(graphNode.name)
-          sprite.color = '#ffffff'
+          sprite.color = isDark ? BACKGROUND_COLORS.dark.label : BACKGROUND_COLORS.light.label
           sprite.textHeight = BASE_SIZES.label3D
           sprite.position.y = sphereSize + BASE_SIZES.label3D
           group.add(sprite)

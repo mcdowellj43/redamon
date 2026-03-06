@@ -26,6 +26,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Target Configuration
     'TARGET_DOMAIN': '',
     'SUBDOMAIN_LIST': [],
+    'IP_MODE': False,
+    'TARGET_IPS': [],
     'VERIFY_DOMAIN_OWNERSHIP': False,
     'OWNERSHIP_TOKEN': 'your-secret-token-here',
     'OWNERSHIP_TXT_PREFIX': '_redamon-verify',
@@ -345,6 +347,8 @@ def fetch_project_settings(project_id: str, webapp_url: str) -> dict[str, Any]:
     # Target Configuration
     settings['TARGET_DOMAIN'] = project.get('targetDomain', DEFAULT_SETTINGS['TARGET_DOMAIN'])
     settings['SUBDOMAIN_LIST'] = project.get('subdomainList', DEFAULT_SETTINGS['SUBDOMAIN_LIST'])
+    settings['IP_MODE'] = project.get('ipMode', DEFAULT_SETTINGS['IP_MODE'])
+    settings['TARGET_IPS'] = project.get('targetIps', DEFAULT_SETTINGS['TARGET_IPS'])
     settings['VERIFY_DOMAIN_OWNERSHIP'] = project.get('verifyDomainOwnership', DEFAULT_SETTINGS['VERIFY_DOMAIN_OWNERSHIP'])
     settings['OWNERSHIP_TOKEN'] = project.get('ownershipToken', DEFAULT_SETTINGS['OWNERSHIP_TOKEN'])
     settings['OWNERSHIP_TXT_PREFIX'] = project.get('ownershipTxtPrefix', DEFAULT_SETTINGS['OWNERSHIP_TXT_PREFIX'])

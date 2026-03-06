@@ -8,13 +8,18 @@ export const NODE_SIZES: Record<string, number> = {
   Traceroute: 1.5,
   BaseURL: 3,
   Technology: 2,
-  Exploit: 2.5, // Largest node - confirmed compromise (diamond shape)
-  ExploitGvm: 2.5, // GVM confirmed exploit - same diamond shape
+  ExploitGvm: 1.4, // GVM confirmed exploit - diamond shape
   GithubHunt: 2.5,          // Prominent scan node
   GithubRepository: 1.5,    // Medium repo nodes
   GithubPath: 1.2,          // File path nodes
   GithubSecret: 1,          // Leaf: leaked secret
   GithubSensitiveFile: 1,   // Leaf: sensitive file
+  // Attack Chain nodes (30% smaller than base)
+  AttackChain: 1.4,            // Chain root
+  ChainStep: 0.5,             // Individual steps (was 0.7)
+  ChainFinding: 1.4,          // Findings
+  ChainDecision: 0.5,         // Decision points (was 0.7)
+  ChainFailure: 1,            // Failed attempts (was 1.5)
   Default: 1,
 }
 

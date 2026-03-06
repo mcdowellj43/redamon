@@ -64,17 +64,28 @@ export function ProjectSelector() {
 
   return (
     <div className={styles.container} ref={dropdownRef}>
-      <button
-        className={styles.trigger}
-        onClick={() => setIsOpen(!isOpen)}
-        title="Select Project"
-      >
-        <FolderOpen size={14} />
-        <span className={styles.projectName}>
-          {currentProject?.name || 'No Project'}
-        </span>
-        <ChevronDown size={12} className={isOpen ? styles.iconOpen : ''} />
-      </button>
+      <div className={styles.triggerGroup}>
+        <button
+          className={styles.trigger}
+          onClick={() => setIsOpen(!isOpen)}
+          title="Select Project"
+        >
+          <FolderOpen size={14} />
+          <span className={styles.projectName}>
+            {currentProject?.name || 'No Project'}
+          </span>
+          <ChevronDown size={12} className={isOpen ? styles.iconOpen : ''} />
+        </button>
+        {currentProject && (
+          <button
+            className={styles.settingsIconButton}
+            onClick={handleSettings}
+            title="Project Settings"
+          >
+            <Settings size={13} />
+          </button>
+        )}
+      </div>
 
       {isOpen && (
         <div className={styles.dropdown}>

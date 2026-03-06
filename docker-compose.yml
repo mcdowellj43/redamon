@@ -137,6 +137,14 @@ services:
     volumes:
       - gvm_redis_socket:/run/redis/
 
+  gvm-postgres-init:
+    image: alpine:3.20
+    container_name: redamon-gvm-postgres-init
+    volumes:
+      - gvm_psql_data:/var/lib/postgresql
+      - gvm_psql_socket:/var/run/postgresql
+    entrypoint: ["/bin/sh", "-c", "rm -f /var/run/postgresql/.s.PGSQL.5432.lock /var/run/postgresql/.s.PGSQL.5432 /var/lib/postgresql/17/main/postmaster.pid && echo 'Cleaned stale PG locks'"]
+
   gvm-postgres:
     image: registry.community.greenbone.net/community/pg-gvm:stable
     container_name: redamon-gvm-postgres
@@ -144,6 +152,9 @@ services:
     volumes:
       - gvm_psql_data:/var/lib/postgresql
       - gvm_psql_socket:/var/run/postgresql
+    depends_on:
+      gvm-postgres-init:
+        condition: service_completed_successfully
 
   gvmd:
     image: registry.community.greenbone.net/community/gvmd:stable
@@ -243,11 +254,9 @@ services:
       - ./github_secret_hunt:/app/github_secret_hunt:ro
       - ./github_secret_hunt/output:/app/github_secret_hunt/output:rw
     environment:
-      RECON_PATH: ${PWD}/recon
+      # Host paths are auto-detected from container mounts (no hardcoded paths needed)
       RECON_IMAGE: redamon-recon:latest
-      GVM_SCAN_PATH: ${PWD}/gvm_scan
       GVM_IMAGE: redamon-vuln-scanner:latest
-      GITHUB_HUNT_PATH: ${PWD}/github_secret_hunt
       GITHUB_HUNT_IMAGE: redamon-github-hunter:latest
       # Forwarded to spawned recon containers (host network, so localhost)
       NVD_API_KEY: ${NVD_API_KEY:-}
@@ -290,7 +299,9 @@ services:
       - "${MCP_METASPLOIT_PORT:-8003}:8003"
       - "${MCP_NMAP_PORT:-8004}:8004"
       - "8013:8013"
+      - "8014:8014"
       - "4444:4444"
+      - "4040:4040"
     volumes:
       - ./mcp/servers:/opt/mcp_servers
       - ./mcp/output:/opt/output
@@ -304,8 +315,12 @@ services:
       METASPLOIT_PORT: "8003"
       NMAP_PORT: "8004"
       MSF_PROGRESS_PORT: "8013"
+      HYDRA_PROGRESS_PORT: "8014"
       MSF_AUTO_UPDATE: "${MSF_AUTO_UPDATE:-true}"
       NUCLEI_AUTO_UPDATE: "${NUCLEI_AUTO_UPDATE:-true}"
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+      CHISEL_SERVER_URL: ${CHISEL_SERVER_URL:-}
+      CHISEL_AUTH: ${CHISEL_AUTH:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 8000)); s.close()"]
@@ -329,12 +344,17 @@ services:
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme123}
       # AI provider keys (from root .env)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-}
+      OPENAI_COMPAT_API_KEY: ${OPENAI_COMPAT_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      # Tunnel env vars (for /tunnel-status badge detection)
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+      CHISEL_SERVER_URL: ${CHISEL_SERVER_URL:-}
       # WebSocket config
       WS_HEARTBEAT_INTERVAL: "30"
       WS_TIMEOUT: "300"
@@ -344,6 +364,7 @@ services:
       MCP_NMAP_URL: http://kali-sandbox:8004/sse
       MCP_METASPLOIT_URL: http://kali-sandbox:8003/sse
       MCP_METASPLOIT_PROGRESS_URL: http://kali-sandbox:8013/progress
+      MCP_HYDRA_PROGRESS_URL: http://kali-sandbox:8014/progress
       # Webapp API (internal docker network)
       WEBAPP_API_URL: http://webapp:3000
     extra_hosts:
@@ -351,6 +372,7 @@ services:
     volumes:
       - ./agentic:/app
       - ./agentic/logs:/app/logs
+      - cypherfix-repos:/tmp/cypherfix-repos
     depends_on:
       neo4j:
         condition: service_healthy
@@ -460,3 +482,4 @@ volumes:
     name: redamon_gvmd_socket
   ospd_socket:
     name: redamon_ospd_socket
+  cypherfix-repos:  # Temp storage for cloned GitHub repos (CodeFix agent)

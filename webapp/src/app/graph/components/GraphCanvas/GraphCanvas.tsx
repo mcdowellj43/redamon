@@ -18,6 +18,7 @@ interface GraphCanvasProps {
   selectedNode: GraphNode | null
   onNodeClick: (node: GraphNode) => void
   isDark?: boolean
+  activeChainId?: string
 }
 
 export const GraphCanvas = memo(function GraphCanvas({
@@ -32,6 +33,7 @@ export const GraphCanvas = memo(function GraphCanvas({
   selectedNode,
   onNodeClick,
   isDark = true,
+  activeChainId,
 }: GraphCanvasProps) {
   if (isLoading) {
     return <div className={styles.loading}>Loading graph data...</div>
@@ -68,6 +70,7 @@ export const GraphCanvas = memo(function GraphCanvas({
           selectedNode={selectedNode}
           onNodeClick={onNodeClick}
           isDark={isDark}
+          activeChainId={activeChainId}
         />
       </div>
     )
@@ -84,6 +87,7 @@ export const GraphCanvas = memo(function GraphCanvas({
         selectedNode={selectedNode}
         onNodeClick={onNodeClick}
         isDark={isDark}
+        activeChainId={activeChainId}
       />
     </div>
   )

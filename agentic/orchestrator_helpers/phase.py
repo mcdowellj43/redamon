@@ -3,7 +3,7 @@
 import json
 import asyncio
 import logging
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 from pydantic import ValidationError
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -19,9 +19,9 @@ async def classify_attack_path(
     llm,
     objective: str,
     max_retries: int = 3
-) -> Tuple[str, str]:
+) -> Tuple[str, str, Optional[str], Optional[int], List[str]]:
     """
-    Use LLM to classify the attack path type and required phase from user objective.
+    Use LLM to classify the attack path type, required phase, and target hints.
 
     Returns validated AttackPathType using Pydantic model.
     Includes retry logic with exponential backoff for resilience.
@@ -32,9 +32,12 @@ async def classify_attack_path(
         max_retries: Maximum number of retry attempts (default: 3)
 
     Returns:
-        Tuple of (attack_path_type, required_phase):
-        - attack_path_type: "cve_exploit" or "brute_force_credential_guess"
+        Tuple of (attack_path_type, required_phase, target_host, target_port, target_cves):
+        - attack_path_type: "cve_exploit", "brute_force_credential_guess", or "<term>-unclassified"
         - required_phase: "informational", "exploitation", or "post_exploitation"
+        - target_host: IP or hostname extracted from objective (or None)
+        - target_port: port number extracted from objective (or None)
+        - target_cves: list of CVE IDs extracted from objective
     """
     prompt = ATTACK_PATH_CLASSIFICATION_PROMPT.format(objective=objective)
 
@@ -61,10 +64,26 @@ async def classify_attack_path(
                     f"Attack path classified as '{classification.attack_path_type}' "
                     f"(confidence: {classification.confidence:.2f}, "
                     f"service: {classification.detected_service}, "
-                    f"required_phase: {required_phase}, attempt: {attempt + 1})"
+                    f"required_phase: {required_phase}, "
+                    f"target_host: {classification.target_host}, "
+                    f"target_port: {classification.target_port}, "
+                    f"target_cves: {classification.target_cves}, "
+                    f"attempt: {attempt + 1})"
                 )
 
-                return classification.attack_path_type, required_phase
+                if classification.attack_path_type.endswith("-unclassified"):
+                    logger.info(
+                        f"Unclassified attack path: '{classification.attack_path_type}' "
+                        f"— no specific workflow prompts will be used"
+                    )
+
+                return (
+                    classification.attack_path_type,
+                    required_phase,
+                    classification.target_host,
+                    classification.target_port,
+                    classification.target_cves,
+                )
             else:
                 last_error = "No valid JSON found in response"
                 logger.warning(f"Attempt {attempt + 1}/{max_retries}: {last_error}")
@@ -86,7 +105,7 @@ async def classify_attack_path(
             await asyncio.sleep(0.1 * (2 ** attempt))
 
     logger.error(f"Failed to classify attack path after {max_retries} attempts: {last_error}")
-    return "cve_exploit", "informational"  # Safe default - start with recon
+    return "cve_exploit", "informational", None, None, []  # Safe default - start with recon
 
 
 def determine_phase_for_new_objective(

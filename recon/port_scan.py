@@ -1025,6 +1025,15 @@ def run_naabu_scan(recon_data: dict, output_file: Path = None, settings: dict = 
                     break  # No more fallbacks
 
             if process.returncode == 0 or naabu_output.exists():
+                # SYN scan succeeded but found 0 ports — firewall may be
+                # silently dropping SYN probes.  Retry with CONNECT scan
+                # which uses full TCP handshake and works through most firewalls.
+                if (scan_type == 's' and attempt == 0
+                        and (not naabu_output.exists()
+                             or naabu_output.stat().st_size == 0)):
+                    print(f"    [!] SYN scan completed but found no open ports")
+                    print(f"    [*] Firewall may be dropping SYN probes — retrying with CONNECT scan...")
+                    continue
                 scan_succeeded = True
                 break
 

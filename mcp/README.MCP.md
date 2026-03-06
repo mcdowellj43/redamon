@@ -247,7 +247,7 @@ metasploit_console("sessions -i 1")
 
 ## Progress Streaming for Long-Running Commands
 
-Long-running Metasploit commands (like SSH brute force attacks) can take several minutes. To provide real-time feedback, the MCP container exposes a separate HTTP progress endpoint.
+Long-running operations (like Hydra brute force attacks or Metasploit exploits) can take several minutes. To provide real-time feedback, the MCP container exposes a separate HTTP progress endpoint.
 
 ### Architecture
 
@@ -316,7 +316,7 @@ Metasploit uses quiet-period detection to determine when a command finishes. Whe
 
 | Command Type | Timeout | Quiet Period | Use Case |
 |--------------|---------|--------------|----------|
-| `run` | 30 min | 2 min | Brute force attacks (many attempts) |
+| `run` | 30 min | 2 min | Metasploit `run` commands |
 | `exploit` | 10 min | 2 min | CVE exploits (staged payloads) |
 | Other | 3 min | 5 sec | Search, info, sessions, etc. |
 
@@ -444,7 +444,9 @@ If `curl http://localhost:8013/progress` returns "Connection refused":
 
 ### Brute Force Command Not Completing
 
-If SSH brute force runs forever without returning:
+**Note:** Brute force now uses THC Hydra (`execute_hydra`) which is stateless and has a 30-minute hard timeout. The troubleshooting below applies to legacy Metasploit brute force. If Hydra times out, reduce wordlist size or thread count.
+
+If legacy Metasploit SSH brute force runs forever without returning:
 
 1. Check if output contains only prompt/cursor noise (filtered as non-meaningful)
 2. Verify `MSF_RUN_QUIET_PERIOD` is appropriate for your wordlist size

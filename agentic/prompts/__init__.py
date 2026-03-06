@@ -8,17 +8,21 @@ Includes phase-aware reasoning, tool descriptions, and structured output formats
 # Re-export from base
 from .base import (
     TOOL_REGISTRY,
-    INTERNAL_TOOLS,
     MODE_DECISION_MATRIX,
     REACT_SYSTEM_PROMPT,
     PENDING_OUTPUT_ANALYSIS_SECTION,
     PHASE_TRANSITION_MESSAGE,
     USER_QUESTION_MESSAGE,
     FINAL_REPORT_PROMPT,
+    CONVERSATIONAL_RESPONSE_PROMPT,
+    SUMMARY_RESPONSE_PROMPT,
+    determine_response_tier,
     TEXT_TO_CYPHER_SYSTEM,
     # Dynamic prompt builders
     build_tool_availability_table,
     build_informational_tool_descriptions,
+    build_informational_guidance,
+    build_attack_path_behavior,
     build_tool_args_section,
     build_tool_name_enum,
     build_phase_definitions,
@@ -37,11 +41,20 @@ from .cve_exploit_prompts import (
     NO_MODULE_FALLBACK_STATELESS,
 )
 
-# Re-export from brute force credential guess prompts
+# Re-export from Hydra brute force prompts
 from .brute_force_credential_guess_prompts import (
-    BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS,
-    BRUTE_FORCE_CREDENTIAL_GUESS_WORDLIST_GUIDANCE,
+    HYDRA_BRUTE_FORCE_TOOLS,
+    HYDRA_WORDLIST_GUIDANCE,
 )
+
+# Re-export from phishing / social engineering prompts
+from .phishing_social_engineering_prompts import (
+    PHISHING_SOCIAL_ENGINEERING_TOOLS,
+    PHISHING_PAYLOAD_FORMAT_GUIDANCE,
+)
+
+# Re-export from unclassified attack path prompts
+from .unclassified_prompts import UNCLASSIFIED_EXPLOIT_TOOLS
 
 # Re-export from post-exploitation prompts
 from .post_exploitation import (
@@ -54,7 +67,7 @@ from .stealth_rules import STEALTH_MODE_RULES
 
 # Import utilities
 from utils import get_session_config_prompt
-from project_settings import get_setting, get_allowed_tools_for_phase
+from project_settings import get_setting, get_allowed_tools_for_phase, get_hydra_flags_from_settings
 
 
 def _msf_search_failed(execution_trace: list) -> bool:
@@ -92,7 +105,7 @@ def get_phase_tools(
         activate_post_expl: If True, post-exploitation phase is available.
                            If False, exploitation is the final phase.
         post_expl_type: "statefull" for Meterpreter sessions, "stateless" for single commands.
-        attack_path_type: Type of attack path ("cve_exploit", "brute_force_credential_guess")
+        attack_path_type: Type of attack path ("cve_exploit", "brute_force_credential_guess", "phishing_social_engineering")
         execution_trace: List of execution steps (used to detect MSF search failures).
 
     Returns:
@@ -122,11 +135,12 @@ def get_phase_tools(
         parts.append(f"## Custom Instructions\n\n{post_expl_prompt}\n")
 
     # Determine allowed tools for current phase (dynamic from TOOL_PHASE_MAP in DB)
-    # Filter out internal tools that should never be shown to the LLM
-    allowed_tools = [t for t in get_allowed_tools_for_phase(phase) if t not in INTERNAL_TOOLS]
+    allowed_tools = get_allowed_tools_for_phase(phase)
 
-    # Dynamic tool availability table (only shows allowed tools)
-    parts.append(build_tool_availability_table(phase, allowed_tools))
+    # Dynamic tool availability table — skip in informational phase where
+    # build_informational_tool_descriptions() already provides full details
+    if phase != "informational":
+        parts.append(build_tool_availability_table(phase, allowed_tools))
 
     # Add mode decision matrix for exploitation only (not needed in post-expl, mode already determined)
     if phase == "exploitation" and attack_path_type == "cve_exploit":
@@ -140,44 +154,72 @@ def get_phase_tools(
             post_expl_note=post_expl_note
         ))
 
+    # Pre-configured payload settings (LHOST/LPORT/tunnel: ngrok or chisel) — injected BEFORE attack
+    # chain so the agent knows the payload direction regardless of attack path type.
+    #
+    # Injection conditions:
+    #   1. exploitation phase + statefull mode (CVE exploit, brute force)
+    #   2. phishing attack path in ANY phase — payloads are generated before
+    #      exploitation (agent runs msfvenom during informational phase,
+    #      and the "exploitation" in phishing IS when the target opens the file)
+    needs_session_config = (
+        (phase == "exploitation" and is_statefull)
+        or attack_path_type == "phishing_social_engineering"
+    )
+    if needs_session_config:
+        session_config = get_session_config_prompt()
+        if session_config:
+            parts.append(session_config)
+
     # Add phase and ATTACK PATH specific workflow guidance
     if phase == "informational":
         # Dynamic tool descriptions (only shows allowed tools)
         parts.append(build_informational_tool_descriptions(allowed_tools))
 
     elif phase == "exploitation":
-        # Only show exploitation workflows if metasploit_console is allowed
-        if "metasploit_console" in allowed_tools:
-            # SELECT WORKFLOW BASED ON ATTACK PATH TYPE
-            if attack_path_type == "brute_force_credential_guess":
-                # Format with max attempts from params
-                parts.append(BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS.format(
-                    brute_force_max_attempts=get_setting('BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS', 3),
-                    bruteforce_speed=get_setting('BRUTEFORCE_SPEED', 5)
-                ))
-                # Add wordlist reference guide
-                parts.append(BRUTE_FORCE_CREDENTIAL_GUESS_WORDLIST_GUIDANCE)
-            else:
-                # CVE-based exploitation (default)
-                parts.append(CVE_EXPLOIT_TOOLS)
-                # Select payload guidance based on post_expl_type
-                payload_guidance = CVE_PAYLOAD_GUIDANCE_STATEFULL if is_statefull else CVE_PAYLOAD_GUIDANCE_STATELESS
-                parts.append(payload_guidance)
-                # No-module fallback: only inject full workflow AFTER msf search returned no results
-                # This saves ~1,100-1,350 tokens when a module IS found
-                if _msf_search_failed(execution_trace or []):
-                    if is_statefull:
-                        parts.append(NO_MODULE_FALLBACK_STATEFULL)
-                    else:
-                        parts.append(NO_MODULE_FALLBACK_STATELESS)
-                # Add pre-configured session settings for statefull mode
-                # (AFTER fallback so agent sees LHOST/LPORT/BIND values)
+        # SELECT WORKFLOW BASED ON ATTACK PATH TYPE
+        if attack_path_type == "brute_force_credential_guess" and "execute_hydra" in allowed_tools:
+            # Hydra-based brute force workflow
+            hydra_flags = get_hydra_flags_from_settings()
+            # Build flags without -t for templates that override thread count per protocol
+            import re as _re
+            hydra_flags_no_t = _re.sub(r'-t\s+\d+\s*', '', hydra_flags).strip()
+            parts.append(HYDRA_BRUTE_FORCE_TOOLS.format(
+                hydra_max_attempts=get_setting('HYDRA_MAX_WORDLIST_ATTEMPTS', 3),
+                hydra_flags=hydra_flags,
+                hydra_flags_no_t=hydra_flags_no_t
+            ))
+            # Add wordlist reference guide
+            parts.append(HYDRA_WORDLIST_GUIDANCE)
+        elif attack_path_type == "phishing_social_engineering":
+            # Phishing / Social Engineering workflow
+            parts.append(PHISHING_SOCIAL_ENGINEERING_TOOLS)
+            parts.append(PHISHING_PAYLOAD_FORMAT_GUIDANCE)
+            # Inject SMTP config only for phishing path (saves tokens for other paths)
+            smtp_config = get_setting('PHISHING_SMTP_CONFIG', '')
+            if smtp_config:
+                parts.append(
+                    f"## Pre-Configured SMTP Settings\n\n"
+                    f"Use these for email delivery via execute_code (Python smtplib):\n{smtp_config}\n"
+                )
+        elif attack_path_type.endswith("-unclassified"):
+            # Generic unclassified workflow — no specific tool workflow
+            parts.append(UNCLASSIFIED_EXPLOIT_TOOLS)
+        elif "metasploit_console" in allowed_tools:
+            # CVE-based exploitation (default)
+            parts.append(CVE_EXPLOIT_TOOLS)
+            # Select payload guidance based on post_expl_type
+            payload_guidance = CVE_PAYLOAD_GUIDANCE_STATEFULL if is_statefull else CVE_PAYLOAD_GUIDANCE_STATELESS
+            parts.append(payload_guidance)
+            # No-module fallback: only inject full workflow AFTER msf search returned no results
+            # This saves ~1,100-1,350 tokens when a module IS found
+            if _msf_search_failed(execution_trace or []):
                 if is_statefull:
-                    session_config = get_session_config_prompt()
-                    if session_config:
-                        parts.append(session_config)
+                    parts.append(NO_MODULE_FALLBACK_STATEFULL)
+                else:
+                    parts.append(NO_MODULE_FALLBACK_STATELESS)
         else:
-            # metasploit_console disabled — show only informational tool descriptions
+            # No exploitation tools available — show only informational tool descriptions
             parts.append(build_informational_tool_descriptions(allowed_tools))
 
         # Add note about post-exploitation availability
@@ -202,9 +244,10 @@ def get_phase_tools(
 __all__ = [
     # Tool registry and builders
     "TOOL_REGISTRY",
-    "INTERNAL_TOOLS",
     "build_tool_availability_table",
     "build_informational_tool_descriptions",
+    "build_informational_guidance",
+    "build_attack_path_behavior",
     "build_tool_args_section",
     "build_tool_name_enum",
     "build_phase_definitions",
@@ -216,6 +259,9 @@ __all__ = [
     "PHASE_TRANSITION_MESSAGE",
     "USER_QUESTION_MESSAGE",
     "FINAL_REPORT_PROMPT",
+    "CONVERSATIONAL_RESPONSE_PROMPT",
+    "SUMMARY_RESPONSE_PROMPT",
+    "determine_response_tier",
     "TEXT_TO_CYPHER_SYSTEM",
     # Classification
     "ATTACK_PATH_CLASSIFICATION_PROMPT",
@@ -225,9 +271,14 @@ __all__ = [
     "CVE_PAYLOAD_GUIDANCE_STATELESS",
     "NO_MODULE_FALLBACK_STATEFULL",
     "NO_MODULE_FALLBACK_STATELESS",
-    # Brute force credential guess
-    "BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS",
-    "BRUTE_FORCE_CREDENTIAL_GUESS_WORDLIST_GUIDANCE",
+    # Hydra brute force
+    "HYDRA_BRUTE_FORCE_TOOLS",
+    "HYDRA_WORDLIST_GUIDANCE",
+    # Phishing / Social Engineering
+    "PHISHING_SOCIAL_ENGINEERING_TOOLS",
+    "PHISHING_PAYLOAD_FORMAT_GUIDANCE",
+    # Unclassified attack path
+    "UNCLASSIFIED_EXPLOIT_TOOLS",
     # Post-exploitation
     "POST_EXPLOITATION_TOOLS_STATEFULL",
     "POST_EXPLOITATION_TOOLS_STATELESS",

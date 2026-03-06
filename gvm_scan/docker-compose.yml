@@ -85,15 +85,15 @@ services:
     container_name: redamon-gvm-redis
     restart: on-failure
     volumes:
-      - redis_socket:/run/redis/
+      - gvm_redis_socket:/run/redis/
 
   pg-gvm:
     image: registry.community.greenbone.net/community/pg-gvm:stable
     container_name: redamon-gvm-postgres
     restart: on-failure
     volumes:
-      - psql_data:/var/lib/postgresql
-      - psql_socket:/var/run/postgresql
+      - gvm_psql_data:/var/lib/postgresql
+      - gvm_psql_socket:/var/run/postgresql
 
   gvmd:
     image: registry.community.greenbone.net/community/gvmd:stable
@@ -105,10 +105,10 @@ services:
       - cert_data:/var/lib/gvm/cert-data
       - data_objects:/var/lib/gvm/data-objects/gvmd
       - vt_data:/var/lib/openvas/plugins
-      - psql_data:/var/lib/postgresql
+      - gvm_psql_data:/var/lib/postgresql
       - gvmd_socket:/run/gvmd
       - ospd_socket:/run/ospd
-      - psql_socket:/var/run/postgresql
+      - gvm_psql_socket:/var/run/postgresql
     depends_on:
       pg-gvm:
         condition: service_started
@@ -143,7 +143,7 @@ services:
       - vt_data:/var/lib/openvas/plugins
       - notus_data:/var/lib/notus
       - ospd_socket:/run/ospd
-      - redis_socket:/run/redis/
+      - gvm_redis_socket:/run/redis/
     depends_on:
       redis-server:
         condition: service_started
@@ -187,12 +187,12 @@ volumes:
     name: redamon_data_objects
   gpg_data:
     name: redamon_gpg_data
-  redis_socket:
-    name: redamon_redis_socket
-  psql_data:
-    name: redamon_psql_data
-  psql_socket:
-    name: redamon_psql_socket
+  gvm_redis_socket:
+    name: redamon_gvm_redis_socket
+  gvm_psql_data:
+    name: redamon_gvm_psql_data
+  gvm_psql_socket:
+    name: redamon_gvm_psql_socket
   gvmd_data:
     name: redamon_gvmd_data
   gvmd_socket:

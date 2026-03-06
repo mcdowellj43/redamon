@@ -23,8 +23,7 @@ export const NODE_COLORS: Record<string, string> = {
   Endpoint: '#8b5cf6',       // Purple - Paths/routes
   Parameter: '#a855f7',      // Light purple - Inputs (attack surface)
 
-  // EXPLOITATION RESULTS (Amber) - Confirmed compromises
-  Exploit: '#f59e0b',        // Amber - Confirmed compromise (AI agent)
+  // EXPLOITATION RESULTS - Confirmed compromises
   ExploitGvm: '#ea580c',     // Orange-600 - GVM confirmed exploitation (active check)
 
   // CONTEXT & METADATA (Neutral family) - Supporting information
@@ -38,6 +37,13 @@ export const NODE_COLORS: Record<string, string> = {
   GithubPath: '#9ca3af',           // Gray-400 - file path node
   GithubSecret: '#7c6f9b',        // Muted dusty purple - leaked secret (API key, credential)
   GithubSensitiveFile: '#5b8a72',  // Muted sage green - sensitive file (.env, config)
+
+  // ATTACK CHAIN (Amber family) — Agent execution history
+  AttackChain: '#f59e0b',     // Amber - Chain root
+  ChainStep: '#f59e0b',       // Amber - Execution steps
+  ChainFinding: '#f59e0b',    // Amber - Findings
+  ChainDecision: '#f59e0b',   // Amber - Decision points
+  ChainFailure: '#f59e0b',    // Amber - Failed attempts
 
   Default: '#6b7280',        // Gray - Fallback
 }
@@ -67,6 +73,8 @@ export const LINK_COLORS = {
   default: '#9ca3af',
   highlighted: '#60a5fa',
   particle: '#60a5fa',
+  chainParticle: '#f59e0b',   // Amber - animated flow on attack chain edges
+  chainLink: '#6b7280',       // Gray-500 - attack chain edges
 } as const
 
 // Selection colors
@@ -74,12 +82,21 @@ export const SELECTION_COLORS = {
   ring: '#22c55e',
 } as const
 
+// Attack chain session colors
+export const CHAIN_SESSION_COLORS = {
+  inactive: '#6b7280',          // Grey-500 — chains not in active session
+  inactiveSelected: '#f59e0b',  // Amber — inactive chain node when clicked/selected
+  activeRing: '#facc15',        // Yellow-400 — pulsing ring on active AttackChain node
+} as const
+
 // Background colors by theme
 export const BACKGROUND_COLORS = {
   dark: {
     graph: '#0a0a0a',
+    label: '#ffffff',
   },
   light: {
-    graph: '#f3f4f6', // gray-100
+    graph: '#ffffff',
+    label: '#3f3f46', // gray-700
   },
 } as const

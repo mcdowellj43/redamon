@@ -17,7 +17,7 @@ interface GithubSectionProps {
 export function GithubSection({ data, updateField }: GithubSectionProps) {
   const [isOpen, setIsOpen] = useState(true)
 
-  const hasToken = data.githubAccessToken.length > 0
+  const hasToken = (data.githubAccessToken ?? '').length > 0
 
   return (
     <div className={styles.section}>

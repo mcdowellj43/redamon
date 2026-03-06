@@ -58,6 +58,43 @@ def _normalize_extracted_info(extracted: dict) -> None:
         extracted["sessions"] = parsed_sessions
 
 
+def _normalize_chain_findings(output_analysis: dict) -> None:
+    """Normalize chain_findings in output_analysis dict in-place.
+
+    Ensures chain_findings is a list with properly-typed fields.
+    """
+    findings = output_analysis.get("chain_findings")
+    if findings is None:
+        return
+    if not isinstance(findings, list):
+        output_analysis["chain_findings"] = []
+        return
+
+    VALID_SEVERITIES = {"critical", "high", "medium", "low", "info"}
+    normalized = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        # Normalize finding_type to lowercase
+        if "finding_type" in f:
+            f["finding_type"] = str(f["finding_type"]).lower().strip()
+        # Default missing severity, normalize to lowercase
+        sev = str(f.get("severity", "info")).lower().strip()
+        f["severity"] = sev if sev in VALID_SEVERITIES else "info"
+        # Ensure list fields
+        if "related_cves" in f and not isinstance(f["related_cves"], list):
+            f["related_cves"] = []
+        if "related_ips" in f and not isinstance(f["related_ips"], list):
+            f["related_ips"] = []
+        # Ensure confidence is int
+        try:
+            f["confidence"] = int(f.get("confidence", 80))
+        except (ValueError, TypeError):
+            f["confidence"] = 80
+        normalized.append(f)
+    output_analysis["chain_findings"] = normalized
+
+
 def try_parse_llm_decision(response_text: str) -> Tuple[Optional[LLMDecision], Optional[str]]:
     """
     Attempt to parse LLM decision from JSON response.
@@ -92,6 +129,10 @@ def try_parse_llm_decision(response_text: str) -> Tuple[Optional[LLMDecision], O
                 "extracted_info" in data["output_analysis"]):
             extracted = data["output_analysis"]["extracted_info"]
             _normalize_extracted_info(extracted)
+
+        # Normalize chain_findings in output_analysis
+        if data.get("output_analysis") and isinstance(data["output_analysis"], dict):
+            _normalize_chain_findings(data["output_analysis"])
 
         return LLMDecision.model_validate(data), None
     except json.JSONDecodeError as e:

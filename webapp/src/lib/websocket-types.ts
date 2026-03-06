@@ -38,6 +38,7 @@ export enum MessageType {
   TASK_COMPLETE = 'task_complete',
   GUIDANCE_ACK = 'guidance_ack',
   STOPPED = 'stopped',
+  FILE_READY = 'file_ready',
 }
 
 // =============================================================================
@@ -121,7 +122,7 @@ export interface ToolCompletePayload {
 export interface PhaseUpdatePayload {
   current_phase: string
   iteration_count: number
-  attack_path_type?: 'cve_exploit' | 'brute_force_credential_guess'
+  attack_path_type?: string  // "cve_exploit", "brute_force_credential_guess", or "<term>-unclassified"
 }
 
 export interface TodoItem {
@@ -158,6 +159,7 @@ export interface ResponsePayload {
   iteration_count: number
   phase: string
   task_complete: boolean
+  response_tier?: 'conversational' | 'summary' | 'full_report'
 }
 
 export interface ExecutionStepPayload {
@@ -173,6 +175,13 @@ export interface TaskCompletePayload {
   message: string
   final_phase: string
   total_iterations: number
+}
+
+export interface FileReadyPayload {
+  filepath: string
+  filename: string
+  source: string
+  description: string
 }
 
 // =============================================================================
@@ -207,6 +216,48 @@ export interface WebSocketState {
   isConnected: boolean
   reconnectAttempt: number
   error: Error | null
+}
+
+// =============================================================================
+// ACTIVE SESSIONS (REST polling, not WebSocket)
+// =============================================================================
+
+export interface MsfSession {
+  id: number
+  type: 'meterpreter' | 'shell' | 'unknown'
+  info: string
+  connection: string
+  target_ip: string
+  chat_session_id: string | null
+}
+
+export interface MsfJob {
+  id: number
+  name: string
+  payload: string
+  port: number
+}
+
+export interface NonMsfSession {
+  id: string
+  type: string
+  tool: string
+  command: string
+  chat_session_id: string | null
+}
+
+export interface SessionsData {
+  sessions: MsfSession[]
+  jobs: MsfJob[]
+  non_msf_sessions: NonMsfSession[]
+  cache_age_seconds: number
+  agent_busy: boolean
+}
+
+export interface SessionInteractResult {
+  busy: boolean
+  output?: string
+  message?: string
 }
 
 // =============================================================================

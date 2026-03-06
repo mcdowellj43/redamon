@@ -1,14 +1,15 @@
 """
-Network Recon MCP Server - HTTP Client, Port Scanner & General Shell
+Network Recon MCP Server - HTTP Client, Port Scanner, Shell & Hydra
 
-Exposes curl HTTP client, naabu port scanner, and general command execution
-as MCP tools for agentic penetration testing.
+Exposes curl HTTP client, naabu port scanner, general command execution,
+and THC Hydra password cracker as MCP tools for agentic penetration testing.
 
 Tools:
     - execute_curl: Execute curl with any CLI arguments
     - execute_naabu: Execute naabu with any CLI arguments
     - kali_shell: Execute any shell command in the Kali sandbox
     - execute_code: Write code to file and execute (no shell escaping needed)
+    - execute_hydra: Execute THC Hydra password cracker with any CLI arguments
 """
 
 from fastmcp import FastMCP
@@ -16,6 +17,10 @@ import subprocess
 import shlex
 import re
 import os
+import threading
+import time
+import json
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Strip ANSI escape codes (terminal colors) from output
 ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
@@ -26,6 +31,16 @@ SERVER_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("NETWORK_RECON_PORT", "8000"))
 
 mcp = FastMCP(SERVER_NAME)
+
+# =============================================================================
+# HYDRA PROGRESS TRACKING — Thread-safe state for live progress updates
+# =============================================================================
+
+_hydra_lock = threading.Lock()
+_hydra_output: list = []
+_hydra_active: bool = False
+_hydra_command: str = ""
+_hydra_start_time: float = 0
 
 
 @mcp.tool()
@@ -339,6 +354,165 @@ def execute_code(code: str, language: str = "python", filename: str = "exploit")
         return f"[ERROR] {str(e)}"
 
 
+@mcp.tool()
+def execute_hydra(args: str) -> str:
+    """
+    Execute THC Hydra password cracker with any valid CLI arguments.
+
+    Hydra is a fast, parallelised network login cracker supporting 50+ protocols.
+    It runs, reports results, and exits (stateless — no persistent sessions).
+    Output is streamed line-by-line for live progress tracking.
+
+    Args:
+        args: Command-line arguments for hydra (without the 'hydra' command itself)
+
+    Returns:
+        Command output with found credentials or status information
+
+    Examples:
+        SSH brute force (max 4 threads for SSH):
+        - "-l root -P /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt -t 4 -f -e nsr -V ssh://10.0.0.5"
+
+        FTP brute force:
+        - "-l admin -P /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt -f -e nsr -V ftp://10.0.0.5"
+
+        SMB with domain:
+        - '-l "DOMAIN\\administrator" -P passwords.txt -f -V smb://10.0.0.5'
+
+        HTTP POST form (target before protocol, form spec uses colons):
+        - '-l admin -P passwords.txt -f -V 10.0.0.5 http-post-form "/login:user=^USER^&pass=^PASS^:F=Invalid"'
+
+        RDP (max 1 thread):
+        - "-l Administrator -P passwords.txt -t 1 -f -V rdp://10.0.0.5"
+
+        VNC (password-only, no username):
+        - '-p "" -P passwords.txt -f -V vnc://10.0.0.5'
+
+        MySQL:
+        - "-l root -P passwords.txt -f -V mysql://10.0.0.5"
+
+        Redis (password-only):
+        - '-p "" -P passwords.txt -f -V redis://10.0.0.5'
+
+        Colon-separated user:pass file:
+        - "-C /usr/share/metasploit-framework/data/wordlists/piata_ssh_userpass.txt -f ssh://10.0.0.5"
+    """
+    global _hydra_output, _hydra_active, _hydra_command, _hydra_start_time
+
+    try:
+        cmd_args = shlex.split(args)
+
+        # Initialize progress state
+        with _hydra_lock:
+            _hydra_output = []
+            _hydra_active = True
+            _hydra_command = args[:100]
+            _hydra_start_time = time.time()
+
+        proc = subprocess.Popen(
+            ["hydra"] + cmd_args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # Merge stderr into stdout for unified streaming
+            text=True,
+            bufsize=1  # Line-buffered
+        )
+
+        output_lines = []
+        try:
+            for line in proc.stdout:
+                clean_line = ANSI_ESCAPE.sub('', line.rstrip())
+                output_lines.append(clean_line)
+                with _hydra_lock:
+                    _hydra_output.append(clean_line)
+        except Exception:
+            pass
+
+        # Wait for process to finish (should already be done after stdout EOF)
+        try:
+            proc.wait(timeout=1800)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            output_lines.append("[ERROR] Timed out after 1800s.")
+
+        # Mark execution complete
+        with _hydra_lock:
+            _hydra_active = False
+
+        output = '\n'.join(output_lines)
+        return output if output.strip() else "[INFO] No valid credentials found"
+
+    except FileNotFoundError:
+        with _hydra_lock:
+            _hydra_active = False
+        return "[ERROR] hydra not found. Ensure it is installed in the container."
+    except Exception as e:
+        with _hydra_lock:
+            _hydra_active = False
+        return f"[ERROR] {str(e)}"
+
+
+# =============================================================================
+# HTTP PROGRESS SERVER — For live Hydra progress updates during execution
+# =============================================================================
+
+HYDRA_PROGRESS_PORT = int(os.getenv("HYDRA_PROGRESS_PORT", "8014"))
+
+
+def get_hydra_progress() -> dict:
+    """Get current Hydra execution progress (thread-safe)."""
+    with _hydra_lock:
+        raw_output = '\n'.join(_hydra_output[-100:])
+        clean_output = ANSI_ESCAPE.sub('', raw_output)
+        return {
+            "active": _hydra_active,
+            "command": _hydra_command,
+            "elapsed_seconds": round(time.time() - _hydra_start_time, 1) if _hydra_active else 0,
+            "line_count": len(_hydra_output),
+            "output": clean_output
+        }
+
+
+class HydraProgressHandler(BaseHTTPRequestHandler):
+    """HTTP handler for Hydra progress endpoint."""
+
+    def do_GET(self):
+        if self.path == '/progress':
+            try:
+                progress = get_hydra_progress()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(progress).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode())
+        elif self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok"}).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        """Suppress request logging."""
+        pass
+
+
+def start_hydra_progress_server(port: int = HYDRA_PROGRESS_PORT):
+    """Start HTTP server for Hydra progress endpoint in a background thread."""
+    server = HTTPServer(('0.0.0.0', port), HydraProgressHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"[HYDRA] Progress server started on port {port}")
+    return server
+
+
 if __name__ == "__main__":
     import sys
 
@@ -346,6 +520,7 @@ if __name__ == "__main__":
     transport = os.getenv("MCP_TRANSPORT", "stdio")
 
     if transport == "sse":
+        start_hydra_progress_server(HYDRA_PROGRESS_PORT)
         mcp.run(transport="sse", host=SERVER_HOST, port=SERVER_PORT)
     else:
         mcp.run(transport="stdio")

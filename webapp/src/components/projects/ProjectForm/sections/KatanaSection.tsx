@@ -132,7 +132,7 @@ export function KatanaSection({ data, updateField }: KatanaSectionProps) {
               <label className={styles.fieldLabel}>URL Patterns to Exclude</label>
               <textarea
                 className="textarea"
-                value={data.katanaExcludePatterns.join('\n')}
+                value={(data.katanaExcludePatterns ?? []).join('\n')}
                 onChange={(e) => updateField('katanaExcludePatterns', e.target.value.split('\n').filter(Boolean))}
                 placeholder="/_next/static&#10;.png&#10;.css&#10;/images/"
                 rows={5}
@@ -149,7 +149,7 @@ export function KatanaSection({ data, updateField }: KatanaSectionProps) {
               <label className={styles.fieldLabel}>Request Headers</label>
               <textarea
                 className="textarea"
-                value={data.katanaCustomHeaders.join('\n')}
+                value={(data.katanaCustomHeaders ?? []).join('\n')}
                 onChange={(e) => updateField('katanaCustomHeaders', e.target.value.split('\n').filter(Boolean))}
                 placeholder="User-Agent: Mozilla/5.0...&#10;Accept: text/html..."
                 rows={3}

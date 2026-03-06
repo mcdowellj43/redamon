@@ -45,10 +45,12 @@ PROJECT_ID = _settings['PROJECT_ID']
 VERIFY_DOMAIN_OWNERSHIP = _settings['VERIFY_DOMAIN_OWNERSHIP']
 OWNERSHIP_TOKEN = _settings['OWNERSHIP_TOKEN']
 OWNERSHIP_TXT_PREFIX = _settings['OWNERSHIP_TXT_PREFIX']
+IP_MODE = _settings['IP_MODE']
+TARGET_IPS = _settings['TARGET_IPS']
 
 # Import recon modules
 from recon.whois_recon import whois_lookup
-from recon.domain_recon import discover_subdomains, verify_domain_ownership
+from recon.domain_recon import discover_subdomains, verify_domain_ownership, reverse_dns_lookup
 from recon.port_scan import run_port_scan
 from recon.http_probe import run_http_probe
 from recon.resource_enum import run_resource_enum
@@ -167,6 +169,268 @@ def save_recon_file(data: dict, output_file: Path):
     """Save recon data to JSON file."""
     with open(output_file, 'w') as f:
         json.dump(data, f, indent=2)
+
+
+def run_ip_recon(target_ips: list, settings: dict) -> dict:
+    """
+    Run IP-based reconnaissance: expand CIDRs, reverse DNS, IP WHOIS.
+
+    Produces a recon data structure compatible with the domain-based pipeline
+    using mock Domain/Subdomain names derived from reverse DNS or IP addresses.
+
+    Args:
+        target_ips: List of IP addresses and/or CIDR ranges
+        settings: Full settings dictionary
+
+    Returns:
+        Complete reconnaissance data dict (same shape as run_domain_recon output)
+    """
+    import ipaddress
+    from recon.domain_recon import dns_lookup
+
+    print("\n" + "=" * 70)
+    print("               RedAmon - IP-Based Reconnaissance")
+    print("=" * 70)
+    print(f"  Target IPs/CIDRs: {', '.join(target_ips)}")
+    print("=" * 70 + "\n")
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_file = OUTPUT_DIR / f"recon_{PROJECT_ID}.json"
+
+    mock_domain = f"ip-targets.{PROJECT_ID}"
+
+    # Step 1: Expand CIDRs into individual IPs
+    expanded_ips = []
+    original_cidrs = []
+    for entry in target_ips:
+        entry = entry.strip()
+        if '/' in entry:
+            try:
+                network = ipaddress.ip_network(entry, strict=False)
+                original_cidrs.append(entry)
+                for host in network.hosts():
+                    expanded_ips.append(str(host))
+                # For /32 (IPv4) or /128 (IPv6) single-host networks, hosts() is empty
+                if network.prefixlen in (32, 128):
+                    expanded_ips.append(str(network.network_address))
+            except ValueError as e:
+                print(f"[!] Invalid CIDR {entry}: {e}")
+        else:
+            expanded_ips.append(entry)
+
+    expanded_ips = list(dict.fromkeys(expanded_ips))  # deduplicate preserving order
+    print(f"[*] Expanded {len(target_ips)} entries to {len(expanded_ips)} individual IPs")
+
+    # Step 2: Reverse DNS for each IP
+    print(f"\n[PHASE 1] Reverse DNS Lookup")
+    print("-" * 40)
+
+    ip_to_hostname = {}
+    all_hostnames = []
+    subdomains_dns = {}
+
+    for ip in expanded_ips:
+        hostname = reverse_dns_lookup(ip, max_retries=settings.get('DNS_MAX_RETRIES', 3))
+        if hostname:
+            ip_to_hostname[ip] = hostname
+            all_hostnames.append(hostname)
+            print(f"[+] {ip} -> {hostname}")
+        else:
+            # Use IP with dashes as mock subdomain name
+            mock_name = ip.replace('.', '-').replace(':', '-')
+            ip_to_hostname[ip] = mock_name
+            print(f"[-] {ip} -> no PTR (using {mock_name})")
+
+    # Step 3: Build DNS data structure for each "subdomain"
+    print(f"\n[PHASE 2] DNS Resolution for Discovered Hosts")
+    print("-" * 40)
+
+    subdomain_names = []
+    for ip, hostname in ip_to_hostname.items():
+        # Determine if this is a real hostname or mock
+        is_real_hostname = hostname in all_hostnames and not hostname.replace('-', '').replace('.', '').isdigit()
+
+        if is_real_hostname:
+            # Resolve DNS for real hostnames
+            print(f"[*] Resolving: {hostname}")
+            host_dns = dns_lookup(hostname)
+            subdomains_dns[hostname] = host_dns
+            subdomain_names.append(hostname)
+        else:
+            # Mock entry - create minimal DNS data with the IP
+            is_v6 = ':' in ip
+            subdomains_dns[hostname] = {
+                "has_records": True,
+                "ips": {
+                    "ipv4": [] if is_v6 else [ip],
+                    "ipv6": [ip] if is_v6 else [],
+                },
+                "records": {},
+                "is_mock": True,
+                "actual_ip": ip,
+            }
+            subdomain_names.append(hostname)
+
+    # Step 4: IP WHOIS (best-effort)
+    print(f"\n[PHASE 3] IP WHOIS Lookup")
+    print("-" * 40)
+    ip_whois = {}
+    try:
+        from recon.whois_recon import whois_lookup as ip_whois_lookup
+        # WHOIS a sample of IPs (first one per /24 block to avoid flooding)
+        seen_blocks = set()
+        for ip in expanded_ips:
+            block = '.'.join(ip.split('.')[:3]) if '.' in ip else ip[:16]
+            if block in seen_blocks:
+                continue
+            seen_blocks.add(block)
+            try:
+                result = ip_whois_lookup(ip, save_output=False, settings=settings)
+                ip_whois[ip] = result.get("whois_data", {})
+                org = ip_whois[ip].get("org", "unknown")
+                print(f"[+] {ip}: org={org}")
+            except Exception as e:
+                print(f"[-] WHOIS for {ip} failed: {e}")
+    except Exception as e:
+        print(f"[!] IP WHOIS module error: {e}")
+
+    # Build the subdomain_filter (all IPs + any PTR-resolved hostnames)
+    # This becomes allowed_hosts for http_probe scope checking
+    subdomain_filter = list(set(expanded_ips + all_hostnames + subdomain_names))
+
+    # Build result structure compatible with domain-based pipeline
+    combined_result = {
+        "metadata": {
+            "scan_type": build_scan_type(),
+            "scan_timestamp": datetime.now().isoformat(),
+            "target": mock_domain,
+            "root_domain": mock_domain,
+            "ip_mode": True,
+            "target_ips": target_ips,
+            "expanded_ips": expanded_ips,
+            "original_cidrs": original_cidrs,
+            "ip_to_hostname": ip_to_hostname,
+            "filtered_mode": True,
+            "subdomain_filter": subdomain_filter,
+            "anonymous_mode": settings.get('USE_TOR_FOR_RECON', False),
+            "bruteforce_mode": False,
+            "modules_executed": ["ip_recon", "reverse_dns"],
+        },
+        "domain": mock_domain,
+        "whois": {"ip_whois": ip_whois},
+        "subdomains": subdomain_names,
+        "subdomain_count": len(subdomain_names),
+        "dns": {
+            "domain": {},
+            "subdomains": subdomains_dns,
+        },
+    }
+
+    save_recon_file(combined_result, output_file)
+    print(f"\n[+] Saved: {output_file}")
+
+    # Update Graph DB
+    if UPDATE_GRAPH_DB:
+        print(f"\n[PHASE 4] Graph Database Update")
+        print("-" * 40)
+        try:
+            from graph_db import Neo4jClient
+            with Neo4jClient() as graph_client:
+                if graph_client.verify_connection():
+                    stats = graph_client.update_graph_from_ip_recon(combined_result, USER_ID, PROJECT_ID)
+                    combined_result["metadata"]["graph_db_updated"] = True
+                    combined_result["metadata"]["graph_db_stats"] = stats
+                    print(f"[+] Graph database updated successfully")
+                else:
+                    print(f"[!] Could not connect to Neo4j - skipping graph update")
+                    combined_result["metadata"]["graph_db_updated"] = False
+        except ImportError:
+            print(f"[!] Neo4j client not available - skipping graph update")
+            combined_result["metadata"]["graph_db_updated"] = False
+        except Exception as e:
+            print(f"[!] Graph DB update failed: {e}")
+            combined_result["metadata"]["graph_db_updated"] = False
+            combined_result["metadata"]["graph_db_error"] = str(e)
+
+        save_recon_file(combined_result, output_file)
+
+    # Continue pipeline: port_scan -> http_probe -> resource_enum -> vuln_scan
+    if "port_scan" in SCAN_MODULES:
+        combined_result = run_port_scan(combined_result, output_file=output_file, settings=settings)
+        combined_result["metadata"]["modules_executed"].append("port_scan")
+        save_recon_file(combined_result, output_file)
+
+        if UPDATE_GRAPH_DB:
+            try:
+                from graph_db import Neo4jClient
+                with Neo4jClient() as graph_client:
+                    if graph_client.verify_connection():
+                        graph_client.update_graph_from_port_scan(combined_result, USER_ID, PROJECT_ID)
+            except Exception as e:
+                print(f"[!] Port scan graph update failed: {e}")
+
+    if "http_probe" in SCAN_MODULES:
+        combined_result = run_http_probe(combined_result, output_file=output_file, settings=settings)
+        combined_result["metadata"]["modules_executed"].append("http_probe")
+        save_recon_file(combined_result, output_file)
+
+        if UPDATE_GRAPH_DB:
+            try:
+                from graph_db import Neo4jClient
+                with Neo4jClient() as graph_client:
+                    if graph_client.verify_connection():
+                        graph_client.update_graph_from_http_probe(combined_result, USER_ID, PROJECT_ID)
+            except Exception as e:
+                print(f"[!] HTTP probe graph update failed: {e}")
+
+    # Check if active scans should be skipped
+    skip_active_scans, skip_reason = should_skip_active_scans(combined_result)
+
+    if skip_active_scans:
+        print(f"\n[!] SKIPPING ACTIVE SCANS: {skip_reason}")
+        combined_result["metadata"]["active_scans_skipped"] = True
+        combined_result["metadata"]["active_scans_skip_reason"] = skip_reason
+        save_recon_file(combined_result, output_file)
+    else:
+        if "resource_enum" in SCAN_MODULES:
+            combined_result = run_resource_enum(combined_result, output_file=output_file, settings=settings)
+            combined_result["metadata"]["modules_executed"].append("resource_enum")
+            save_recon_file(combined_result, output_file)
+
+            if UPDATE_GRAPH_DB:
+                try:
+                    from graph_db import Neo4jClient
+                    with Neo4jClient() as graph_client:
+                        if graph_client.verify_connection():
+                            graph_client.update_graph_from_resource_enum(combined_result, USER_ID, PROJECT_ID)
+                except Exception as e:
+                    print(f"[!] Resource enum graph update failed: {e}")
+
+        if "vuln_scan" in SCAN_MODULES:
+            combined_result = run_vuln_scan(combined_result, output_file=output_file, settings=settings)
+            combined_result["metadata"]["modules_executed"].append("vuln_scan")
+            save_recon_file(combined_result, output_file)
+
+            combined_result = run_mitre_enrichment(combined_result, output_file=output_file, settings=settings)
+            save_recon_file(combined_result, output_file)
+
+            if UPDATE_GRAPH_DB:
+                try:
+                    from graph_db import Neo4jClient
+                    with Neo4jClient() as graph_client:
+                        if graph_client.verify_connection():
+                            graph_client.update_graph_from_vuln_scan(combined_result, USER_ID, PROJECT_ID)
+                except Exception as e:
+                    print(f"[!] Vuln scan graph update failed: {e}")
+
+    print(f"\n{'=' * 70}")
+    print(f"[+] IP RECON COMPLETE")
+    print(f"[+] IPs scanned: {len(expanded_ips)}")
+    print(f"[+] Hostnames resolved: {len(all_hostnames)}")
+    print(f"[+] Output saved: {output_file}")
+    print(f"{'=' * 70}")
+
+    return combined_result
 
 
 def run_domain_recon(target: str, anonymous: bool = False, bruteforce: bool = False,
@@ -562,6 +826,37 @@ def main():
     print()
 
     start_time = datetime.now()
+
+    # IP Mode: skip domain verification and run IP-based recon instead
+    if IP_MODE and TARGET_IPS:
+        print(f"  MODE:              IP-BASED TARGETING")
+        print(f"  TARGET_IPS:        {', '.join(TARGET_IPS)}")
+        print(f"  SCAN_MODULES:      {','.join(SCAN_MODULES) if isinstance(SCAN_MODULES, list) else SCAN_MODULES}")
+        print(f"  UPDATE_GRAPH_DB:   {UPDATE_GRAPH_DB}")
+        print(f"  USER_ID:           {USER_ID}")
+        print(f"  PROJECT_ID:        {PROJECT_ID}")
+        print("═" * 63)
+
+        # Clear previous graph data
+        if UPDATE_GRAPH_DB:
+            print("[*] Clearing previous graph data for this project...")
+            try:
+                from graph_db import Neo4jClient
+                with Neo4jClient() as graph_client:
+                    if graph_client.verify_connection():
+                        clear_stats = graph_client.clear_project_data(USER_ID, PROJECT_ID)
+                        print(f"[+] Previous data cleared: {clear_stats['nodes_deleted']} nodes removed\n")
+                    else:
+                        print("[!] Could not connect to Neo4j - skipping clear\n")
+            except Exception as e:
+                print(f"[!] Failed to clear previous graph data: {e}\n")
+
+        run_ip_recon(TARGET_IPS, _settings)
+
+        end_time = datetime.now()
+        duration = end_time - start_time
+        print(f"\n[+] Total time: {duration}")
+        return 0
 
     # Domain Ownership Verification (if enabled)
     # This MUST be the first check before any scanning to ensure we only

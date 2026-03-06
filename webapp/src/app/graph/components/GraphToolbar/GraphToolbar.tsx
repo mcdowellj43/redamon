@@ -1,7 +1,7 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { Sparkles, Play, Download, Loader2, Terminal, Settings, Shield, Github, EyeOff, FileText } from 'lucide-react'
+import { Bot, Play, Download, Loader2, Terminal, Shield, Github, Target, Zap, MessageSquare, Pause, Square } from 'lucide-react'
+import { StealthIcon } from '@/components/icons/StealthIcon'
 import { Toggle } from '@/components/ui'
 import type { ReconStatus, GvmStatus, GithubHuntStatus } from '@/lib/recon-types'
 import styles from './GraphToolbar.module.css'
@@ -19,6 +19,9 @@ interface GraphToolbarProps {
   subdomainList?: string[]
   // Recon props
   onStartRecon?: () => void
+  onPauseRecon?: () => void
+  onResumeRecon?: () => void
+  onStopRecon?: () => void
   onDownloadJSON?: () => void
   onToggleLogs?: () => void
   reconStatus?: ReconStatus
@@ -26,6 +29,9 @@ interface GraphToolbarProps {
   isLogsOpen?: boolean
   // GVM props
   onStartGvm?: () => void
+  onPauseGvm?: () => void
+  onResumeGvm?: () => void
+  onStopGvm?: () => void
   onDownloadGvmJSON?: () => void
   onToggleGvmLogs?: () => void
   gvmStatus?: GvmStatus
@@ -33,16 +39,26 @@ interface GraphToolbarProps {
   isGvmLogsOpen?: boolean
   // GitHub Hunt props
   onStartGithubHunt?: () => void
+  onPauseGithubHunt?: () => void
+  onResumeGithubHunt?: () => void
+  onStopGithubHunt?: () => void
   onDownloadGithubHuntJSON?: () => void
   onToggleGithubHuntLogs?: () => void
   githubHuntStatus?: GithubHuntStatus
   hasGithubHuntData?: boolean
   isGithubHuntLogsOpen?: boolean
-  // PDF Report
-  onDownloadPDFReport?: () => void
-  hasPDFData?: boolean
   // Stealth mode
   stealthMode?: boolean
+  // Agent status
+  agentActiveCount?: number
+  agentConversations?: Array<{
+    id: string
+    title: string
+    currentPhase: string
+    iterationCount: number
+    agentRunning: boolean
+    sessionId: string
+  }>
 }
 
 export function GraphToolbar({
@@ -58,6 +74,9 @@ export function GraphToolbar({
   subdomainList = [],
   // Recon props
   onStartRecon,
+  onPauseRecon,
+  onResumeRecon,
+  onStopRecon,
   onDownloadJSON,
   onToggleLogs,
   reconStatus = 'idle',
@@ -65,6 +84,9 @@ export function GraphToolbar({
   isLogsOpen = false,
   // GVM props
   onStartGvm,
+  onPauseGvm,
+  onResumeGvm,
+  onStopGvm,
   onDownloadGvmJSON,
   onToggleGvmLogs,
   gvmStatus = 'idle',
@@ -72,26 +94,44 @@ export function GraphToolbar({
   isGvmLogsOpen = false,
   // GitHub Hunt props
   onStartGithubHunt,
+  onPauseGithubHunt,
+  onResumeGithubHunt,
+  onStopGithubHunt,
   onDownloadGithubHuntJSON,
   onToggleGithubHuntLogs,
   githubHuntStatus = 'idle',
   hasGithubHuntData = false,
   isGithubHuntLogsOpen = false,
-  // PDF Report
-  onDownloadPDFReport,
-  hasPDFData = false,
   // Stealth mode
   stealthMode = false,
+  // Agent status
+  agentActiveCount = 0,
+  agentConversations = [],
 }: GraphToolbarProps) {
-  const router = useRouter()
-  const isReconRunning = reconStatus === 'running' || reconStatus === 'starting'
-  const isGvmRunning = gvmStatus === 'running' || gvmStatus === 'starting'
-  const isGithubHuntRunning = githubHuntStatus === 'running' || githubHuntStatus === 'starting'
+  const isReconBusy = reconStatus === 'running' || reconStatus === 'starting'
+  const isReconStopping = reconStatus === 'stopping'
+  const isReconRunning = isReconBusy || isReconStopping
+  const isReconPaused = reconStatus === 'paused'
+  const isReconActive = isReconRunning || isReconPaused
+  const isGvmBusy = gvmStatus === 'running' || gvmStatus === 'starting'
+  const isGvmStopping = gvmStatus === 'stopping'
+  const isGvmRunning = isGvmBusy || isGvmStopping
+  const isGvmPaused = gvmStatus === 'paused'
+  const isGvmActive = isGvmRunning || isGvmPaused
+  const isGithubHuntBusy = githubHuntStatus === 'running' || githubHuntStatus === 'starting'
+  const isGithubHuntStopping = githubHuntStatus === 'stopping'
+  const isGithubHuntRunning = isGithubHuntBusy || isGithubHuntStopping
+  const isGithubHuntPaused = githubHuntStatus === 'paused'
+  const isGithubHuntActive = isGithubHuntRunning || isGithubHuntPaused
 
-  const handleOpenSettings = () => {
-    if (projectId) {
-      router.push(`/projects/${projectId}/settings`)
-    }
+  // Agent status derived values
+  const runningAgent = agentConversations.find(c => c.agentRunning)
+  const totalConversations = agentConversations.length
+
+  const PHASE_STYLES: Record<string, { color: string; bg: string; icon: typeof Shield }> = {
+    informational: { color: '#059669', bg: 'rgba(5, 150, 105, 0.1)', icon: Shield },
+    exploitation: { color: 'var(--status-warning)', bg: 'rgba(245, 158, 11, 0.1)', icon: Target },
+    post_exploitation: { color: 'var(--status-error)', bg: 'rgba(239, 68, 68, 0.1)', icon: Zap },
   }
 
   return (
@@ -143,7 +183,7 @@ export function GraphToolbar({
         <>
           <div className={styles.divider} />
           <div className={styles.stealthBadge} title="Stealth Mode is active — passive/low-noise techniques only">
-            <EyeOff size={12} />
+            <StealthIcon size={12} />
             <span>Stealth</span>
           </div>
         </>
@@ -151,174 +191,248 @@ export function GraphToolbar({
 
       <div className={styles.spacer} />
 
-      {/* Recon Actions */}
-      {projectId && (
-        <>
-          <button
-            className={`${styles.reconButton} ${isReconRunning ? styles.reconButtonActive : ''}`}
-            onClick={onStartRecon}
-            disabled={isReconRunning}
-            title={isReconRunning ? 'Recon in progress...' : 'Start Reconnaissance'}
-          >
-            {isReconRunning ? (
-              <Loader2 size={14} className={styles.spinner} />
+      <div className={styles.actionsRight}>
+        {/* Recon Actions */}
+        {projectId && (
+          <>
+            <div className={styles.actionGroup}>
+              <button
+                className={`${styles.reconButton} ${isReconActive ? styles.reconButtonActive : ''}`}
+                onClick={isReconPaused ? onResumeRecon : onStartRecon}
+                disabled={isReconRunning}
+                title={isReconStopping ? 'Stopping...' : isReconRunning ? 'Recon in progress...' : isReconPaused ? 'Resume Recon' : 'Start Reconnaissance'}
+              >
+                {isReconRunning ? (
+                  <Loader2 size={14} className={styles.spinner} />
+                ) : (
+                  <Play size={14} />
+                )}
+                <span>{isReconStopping ? 'Stopping...' : isReconBusy ? 'Running...' : isReconPaused ? 'Resume' : 'Start Recon'}</span>
+              </button>
+
+              {isReconBusy && (
+                <button
+                  className={styles.pauseButton}
+                  onClick={onPauseRecon}
+                  title="Pause Recon"
+                >
+                  <Pause size={14} />
+                </button>
+              )}
+
+              {isReconActive && (
+                <button
+                  className={styles.stopButton}
+                  onClick={onStopRecon}
+                  disabled={isReconStopping}
+                  title="Stop Recon"
+                >
+                  <Square size={14} />
+                </button>
+              )}
+
+              {isReconActive && (
+                <button
+                  className={`${styles.logsButton} ${isLogsOpen ? styles.logsButtonActive : ''}`}
+                  onClick={onToggleLogs}
+                  title="View Logs"
+                >
+                  <Terminal size={14} />
+                </button>
+              )}
+
+              <button
+                className={styles.downloadButton}
+                onClick={onDownloadJSON}
+                disabled={!hasReconData || isReconActive}
+                title={hasReconData ? 'Download Recon JSON' : 'No data available'}
+              >
+                <Download size={14} />
+              </button>
+            </div>
+
+            {/* GVM Scan Actions */}
+            <div className={styles.actionGroup}>
+              <button
+                className={`${styles.gvmButton} ${isGvmActive ? styles.gvmButtonActive : ''}`}
+                onClick={isGvmPaused ? onResumeGvm : onStartGvm}
+                disabled={isGvmRunning || (!hasReconData && !isGvmPaused) || (stealthMode && !isGvmPaused)}
+                title={
+                  stealthMode && !isGvmPaused
+                    ? 'GVM scanning is disabled in Stealth Mode (generates ~50,000 active probes per target)'
+                    : !hasReconData && !isGvmPaused
+                    ? 'Run recon first'
+                    : isGvmStopping
+                    ? 'Stopping...'
+                    : isGvmRunning
+                    ? 'GVM scan in progress...'
+                    : isGvmPaused
+                    ? 'Resume GVM Scan'
+                    : 'Start GVM Vulnerability Scan'
+                }
+              >
+                {isGvmRunning ? (
+                  <Loader2 size={14} className={styles.spinner} />
+                ) : (
+                  <Shield size={14} />
+                )}
+                <span>{isGvmStopping ? 'Stopping...' : isGvmBusy ? 'Scanning...' : isGvmPaused ? 'Resume' : 'GVM Scan'}</span>
+              </button>
+
+              {isGvmBusy && (
+                <button
+                  className={styles.pauseButton}
+                  onClick={onPauseGvm}
+                  title="Pause GVM Scan"
+                >
+                  <Pause size={14} />
+                </button>
+              )}
+
+              {isGvmActive && (
+                <button
+                  className={styles.stopButton}
+                  onClick={onStopGvm}
+                  disabled={isGvmStopping}
+                  title="Stop GVM Scan"
+                >
+                  <Square size={14} />
+                </button>
+              )}
+
+              {isGvmActive && (
+                <button
+                  className={`${styles.logsButton} ${isGvmLogsOpen ? styles.logsButtonActive : ''}`}
+                  onClick={onToggleGvmLogs}
+                  title="View GVM Logs"
+                >
+                  <Terminal size={14} />
+                </button>
+              )}
+
+              <button
+                className={styles.downloadButton}
+                onClick={onDownloadGvmJSON}
+                disabled={!hasGvmData || isGvmActive}
+                title={hasGvmData ? 'Download GVM JSON' : 'No GVM data available'}
+              >
+                <Download size={14} />
+              </button>
+            </div>
+
+            {/* GitHub Secret Hunt Actions */}
+            <div className={styles.actionGroup}>
+              <button
+                className={`${styles.githubHuntButton} ${isGithubHuntActive ? styles.githubHuntButtonActive : ''}`}
+                onClick={isGithubHuntPaused ? onResumeGithubHunt : onStartGithubHunt}
+                disabled={isGithubHuntRunning || (!hasReconData && !isGithubHuntPaused)}
+                title={
+                  !hasReconData && !isGithubHuntPaused
+                    ? 'Run recon first'
+                    : isGithubHuntStopping
+                    ? 'Stopping...'
+                    : isGithubHuntRunning
+                    ? 'GitHub hunt in progress...'
+                    : isGithubHuntPaused
+                    ? 'Resume GitHub Hunt'
+                    : 'Start GitHub Secret Hunt'
+                }
+              >
+                {isGithubHuntRunning ? (
+                  <Loader2 size={14} className={styles.spinner} />
+                ) : (
+                  <Github size={14} />
+                )}
+                <span>{isGithubHuntStopping ? 'Stopping...' : isGithubHuntBusy ? 'Hunting...' : isGithubHuntPaused ? 'Resume' : 'GitHub Hunt'}</span>
+              </button>
+
+              {isGithubHuntBusy && (
+                <button
+                  className={styles.pauseButton}
+                  onClick={onPauseGithubHunt}
+                  title="Pause GitHub Hunt"
+                >
+                  <Pause size={14} />
+                </button>
+              )}
+
+              {isGithubHuntActive && (
+                <button
+                  className={styles.stopButton}
+                  onClick={onStopGithubHunt}
+                  disabled={isGithubHuntStopping}
+                  title="Stop GitHub Hunt"
+                >
+                  <Square size={14} />
+                </button>
+              )}
+
+              {isGithubHuntActive && (
+                <button
+                  className={`${styles.logsButton} ${isGithubHuntLogsOpen ? styles.logsButtonActive : ''}`}
+                  onClick={onToggleGithubHuntLogs}
+                  title="View GitHub Hunt Logs"
+                >
+                  <Terminal size={14} />
+                </button>
+              )}
+
+              <button
+                className={styles.downloadButton}
+                onClick={onDownloadGithubHuntJSON}
+                disabled={!hasGithubHuntData || isGithubHuntActive}
+                title={hasGithubHuntData ? 'Download GitHub Hunt JSON' : 'No GitHub hunt data available'}
+              >
+                <Download size={14} />
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Agent Status Indicators */}
+        {totalConversations > 0 && (
+          <div className={styles.agentStatus}>
+            {agentActiveCount > 0 ? (
+              <div className={styles.agentActiveBadge}>
+                <span className={styles.agentDot} />
+                <span>{agentActiveCount} active</span>
+              </div>
             ) : (
-              <Play size={14} />
+              <div className={styles.agentIdleBadge}>
+                <MessageSquare size={10} />
+                <span>{totalConversations} chat{totalConversations !== 1 ? 's' : ''}</span>
+              </div>
             )}
-            <span>{isReconRunning ? 'Running...' : 'Start Recon'}</span>
-          </button>
+            {runningAgent && (() => {
+              const phase = PHASE_STYLES[runningAgent.currentPhase] || PHASE_STYLES.informational
+              const PhaseIcon = phase.icon
+              return (
+                <div
+                  className={styles.agentPhaseBadge}
+                  style={{ color: phase.color, backgroundColor: phase.bg, borderColor: phase.color }}
+                >
+                  <PhaseIcon size={10} />
+                  <span>{runningAgent.currentPhase.replace('_', ' ')}</span>
+                  {runningAgent.iterationCount > 0 && (
+                    <span className={styles.agentStep}>Step {runningAgent.iterationCount}</span>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
+        )}
 
-          {isReconRunning && (
-            <button
-              className={`${styles.logsButton} ${isLogsOpen ? styles.logsButtonActive : ''}`}
-              onClick={onToggleLogs}
-              title="View Logs"
-            >
-              <Terminal size={14} />
-            </button>
-          )}
-
-          <button
-            className={styles.downloadButton}
-            onClick={onDownloadJSON}
-            disabled={!hasReconData || isReconRunning}
-            title={hasReconData ? 'Download Recon JSON' : 'No data available'}
-          >
-            <Download size={14} />
-          </button>
-
-          <div className={styles.divider} />
-
-          {/* GVM Scan Actions */}
-          <button
-            className={`${styles.gvmButton} ${isGvmRunning ? styles.gvmButtonActive : ''}`}
-            onClick={onStartGvm}
-            disabled={isGvmRunning || !hasReconData || stealthMode}
-            title={
-              stealthMode
-                ? 'GVM scanning is disabled in Stealth Mode (generates ~50,000 active probes per target)'
-                : !hasReconData
-                ? 'Run recon first'
-                : isGvmRunning
-                ? 'GVM scan in progress...'
-                : 'Start GVM Vulnerability Scan'
-            }
-          >
-            {isGvmRunning ? (
-              <Loader2 size={14} className={styles.spinner} />
-            ) : (
-              <Shield size={14} />
-            )}
-            <span>{isGvmRunning ? 'Scanning...' : 'GVM Scan'}</span>
-          </button>
-
-          {isGvmRunning && (
-            <button
-              className={`${styles.logsButton} ${isGvmLogsOpen ? styles.logsButtonActive : ''}`}
-              onClick={onToggleGvmLogs}
-              title="View GVM Logs"
-            >
-              <Terminal size={14} />
-            </button>
-          )}
-
-          <button
-            className={styles.downloadButton}
-            onClick={onDownloadGvmJSON}
-            disabled={!hasGvmData || isGvmRunning}
-            title={hasGvmData ? 'Download GVM JSON' : 'No GVM data available'}
-          >
-            <Download size={14} />
-          </button>
-
-          <div className={styles.divider} />
-
-          {/* GitHub Secret Hunt Actions */}
-          <button
-            className={`${styles.githubHuntButton} ${isGithubHuntRunning ? styles.githubHuntButtonActive : ''}`}
-            onClick={onStartGithubHunt}
-            disabled={isGithubHuntRunning || !hasReconData}
-            title={
-              !hasReconData
-                ? 'Run recon first'
-                : isGithubHuntRunning
-                ? 'GitHub hunt in progress...'
-                : 'Start GitHub Secret Hunt'
-            }
-          >
-            {isGithubHuntRunning ? (
-              <Loader2 size={14} className={styles.spinner} />
-            ) : (
-              <Github size={14} />
-            )}
-            <span>{isGithubHuntRunning ? 'Hunting...' : 'GitHub Hunt'}</span>
-          </button>
-
-          {isGithubHuntRunning && (
-            <button
-              className={`${styles.logsButton} ${isGithubHuntLogsOpen ? styles.logsButtonActive : ''}`}
-              onClick={onToggleGithubHuntLogs}
-              title="View GitHub Hunt Logs"
-            >
-              <Terminal size={14} />
-            </button>
-          )}
-
-          <button
-            className={styles.downloadButton}
-            onClick={onDownloadGithubHuntJSON}
-            disabled={!hasGithubHuntData || isGithubHuntRunning}
-            title={hasGithubHuntData ? 'Download GitHub Hunt JSON' : 'No GitHub hunt data available'}
-          >
-            <Download size={14} />
-          </button>
-
-          <div className={styles.divider} />
-        </>
-      )}
-
-      {/* PDF Report */}
-      {projectId && onDownloadPDFReport && (
-        <>
-          <div className={styles.divider} />
-
-          <button
-            className={styles.pdfButton}
-            onClick={onDownloadPDFReport}
-            disabled={!hasPDFData || isReconRunning || isGvmRunning || isGithubHuntRunning}
-            title={hasPDFData ? 'Download PDF Report' : 'No data available for report'}
-          >
-            <FileText size={14} />
-            <span>PDF Report</span>
-          </button>
-        </>
-      )}
-
-      <div className={styles.projectBadge}>
-        <span className={styles.projectLabel}>Project:</span>
-        <span className={styles.projectId}>{projectId}</span>
         <button
-          className={styles.settingsButton}
-          onClick={handleOpenSettings}
-          title="Project Settings"
-          aria-label="Open project settings"
+          className={`${styles.aiButton} ${isAIOpen ? styles.aiButtonActive : ''}`}
+          onClick={onToggleAI}
+          aria-label="Toggle AI Agent"
+          aria-expanded={isAIOpen}
+          title="AI Agent"
         >
-          <Settings size={14} />
+          <Bot size={14} />
+          <span>AI Agent</span>
         </button>
       </div>
-
-      <div className={styles.divider} />
-
-      <button
-        className={`${styles.aiButton} ${isAIOpen ? styles.aiButtonActive : ''}`}
-        onClick={onToggleAI}
-        aria-label="Toggle RedAmon Agent"
-        aria-expanded={isAIOpen}
-        title="RedAmon Agent"
-      >
-        <Sparkles size={14} />
-        <span>RedAmon Agent</span>
-      </button>
     </div>
   )
 }

@@ -2,7 +2,8 @@
 Model provider discovery for RedAmon Agent.
 
 Fetches available models from configured AI providers (OpenAI, Anthropic,
-OpenRouter, AWS Bedrock) and returns them in a unified format for the frontend.
+OpenAI-compatible endpoints, OpenRouter, AWS Bedrock) and returns them in a
+unified format for the frontend.
 Results are cached in memory for 1 hour.
 """
 
@@ -117,6 +118,37 @@ async def fetch_anthropic_models() -> list[dict]:
             description="Anthropic",
         ))
 
+    return models
+
+
+# ---------------------------------------------------------------------------
+# OpenAI-Compatible
+# ---------------------------------------------------------------------------
+async def fetch_openai_compat_models() -> list[dict]:
+    """Fetch models from a user-configured OpenAI-compatible API endpoint."""
+    base_url = os.getenv("OPENAI_COMPAT_BASE_URL", "").rstrip("/")
+    api_key = os.getenv("OPENAI_COMPAT_API_KEY", "") or "ollama"
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{base_url}/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        resp.raise_for_status()
+    data = resp.json().get("data", [])
+
+    models = []
+    for m in data:
+        mid = m.get("id", "")
+        if not mid:
+            continue
+        models.append(_model(
+            id=f"openai_compat/{mid}",
+            name=mid,
+            description="OpenAI-Compatible",
+        ))
+
+    models.sort(key=lambda m: m["id"])
     return models
 
 
@@ -237,6 +269,8 @@ async def fetch_all_models() -> dict[str, list[dict]]:
 
     if os.getenv("OPENAI_API_KEY"):
         tasks["OpenAI (Direct)"] = fetch_openai_models()
+    if os.getenv("OPENAI_COMPAT_BASE_URL"):
+        tasks["OpenAI-Compatible"] = fetch_openai_compat_models()
     if os.getenv("ANTHROPIC_API_KEY"):
         tasks["Anthropic (Direct)"] = fetch_anthropic_models()
     if os.getenv("OPENROUTER_API_KEY"):

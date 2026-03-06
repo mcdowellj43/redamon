@@ -2,18 +2,20 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, FolderOpen, Users, RefreshCw, Trash2 } from 'lucide-react'
+import { Plus, FolderOpen, Users, RefreshCw, Trash2, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { useProjects, useDeleteProject } from '@/hooks/useProjects'
 import { useUsers, useCreateUser, useDeleteUser } from '@/hooks/useUsers'
 import { useProject } from '@/providers/ProjectProvider'
 import { ProjectCard } from '@/components/projects/ProjectCard'
+import { ImportModal } from './ImportModal'
 import styles from './page.module.css'
 
 export default function ProjectsPage() {
   const router = useRouter()
   const { userId, setUserId, setCurrentProject } = useProject()
   const [showUserModal, setShowUserModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [newUserName, setNewUserName] = useState('')
   const [newUserEmail, setNewUserEmail] = useState('')
 
@@ -104,6 +106,16 @@ export default function ProjectsPage() {
           >
             <RefreshCw size={14} />
           </button>
+          {userId && (
+            <button
+              className="secondaryButton"
+              onClick={() => setShowImportModal(true)}
+              title="Import project from backup"
+            >
+              <Upload size={14} />
+              Import Project
+            </button>
+          )}
           {userId ? (
             <Link href="/projects/new" className="primaryButton">
               <Plus size={14} />
@@ -188,6 +200,15 @@ export default function ProjectsPage() {
             </button>
           )}
         </div>
+      )}
+
+      {userId && (
+        <ImportModal
+          isOpen={showImportModal}
+          userId={userId}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => refetch()}
+        />
       )}
 
       {showUserModal && (

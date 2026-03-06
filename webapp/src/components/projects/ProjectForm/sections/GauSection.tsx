@@ -20,7 +20,7 @@ export function GauSection({ data, updateField }: GauSectionProps) {
   const [isOpen, setIsOpen] = useState(true)
 
   const toggleProvider = (provider: string) => {
-    const current = data.gauProviders
+    const current = data.gauProviders ?? []
     if (current.includes(provider)) {
       updateField('gauProviders', current.filter(p => p !== provider))
     } else {
@@ -69,7 +69,7 @@ export function GauSection({ data, updateField }: GauSectionProps) {
                       <input
                         type="checkbox"
                         className="checkbox"
-                        checked={data.gauProviders.includes(provider)}
+                        checked={(data.gauProviders ?? []).includes(provider)}
                         onChange={() => toggleProvider(provider)}
                       />
                       {provider}
@@ -121,7 +121,7 @@ export function GauSection({ data, updateField }: GauSectionProps) {
                   <input
                     type="text"
                     className="textInput"
-                    value={data.gauYearRange.join(', ')}
+                    value={(data.gauYearRange ?? []).join(', ')}
                     onChange={(e) => updateField('gauYearRange', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                     placeholder="2020, 2024 (empty = all years)"
                   />
@@ -147,7 +147,7 @@ export function GauSection({ data, updateField }: GauSectionProps) {
                   <input
                     type="text"
                     className="textInput"
-                    value={data.gauBlacklistExtensions.join(', ')}
+                    value={(data.gauBlacklistExtensions ?? []).join(', ')}
                     onChange={(e) => updateField('gauBlacklistExtensions', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                     placeholder="png, jpg, css, pdf, zip"
                   />
@@ -225,7 +225,7 @@ export function GauSection({ data, updateField }: GauSectionProps) {
                       <input
                         type="text"
                         className="textInput"
-                        value={data.gauVerifyAcceptStatus.join(', ')}
+                        value={(data.gauVerifyAcceptStatus ?? []).join(', ')}
                         onChange={(e) => updateField('gauVerifyAcceptStatus', e.target.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)))}
                         placeholder="200, 201, 301, 302, 307, 308, 401, 403"
                       />
