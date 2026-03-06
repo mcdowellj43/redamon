@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { GraphToolbar } from './components/GraphToolbar'
 import { GraphCanvas } from './components/GraphCanvas'
@@ -24,15 +24,16 @@ export default function GraphPage() {
   const router = useRouter()
   const { projectId, userId, currentProject, setCurrentProject, isLoading: projectLoading } = useProject()
 
-  const [activeView, setActiveView] = useState<ViewMode>('graph')
   const [is3D, setIs3D] = useState(true)
   const [showLabels, setShowLabels] = useState(true)
+  const [activeView, setActiveView] = useState<ViewMode>('graph')
   const [isAIOpen, setIsAIOpen] = useState(false)
   const [isReconModalOpen, setIsReconModalOpen] = useState(false)
   const [activeLogsDrawer, setActiveLogsDrawer] = useState<'recon' | 'gvm' | 'githubHunt' | null>(null)
   const [hasReconData, setHasReconData] = useState(false)
   const [hasGvmData, setHasGvmData] = useState(false)
   const [hasGithubHuntData, setHasGithubHuntData] = useState(false)
+  const [hasPDFData, setHasPDFData] = useState(false)
   const [graphStats, setGraphStats] = useState<{ totalNodes: number; nodesByType: Record<string, number> } | null>(null)
   const [gvmStats, setGvmStats] = useState<{ totalGvmNodes: number; nodesByType: Record<string, number> } | null>(null)
   const [isGvmModalOpen, setIsGvmModalOpen] = useState(false)
@@ -58,36 +59,7 @@ export default function GraphPage() {
     return () => { ro.disconnect(); window.removeEventListener('resize', update) }
   }, [])
   const { isDark } = useTheme()
-  const { sessionId, resetSession, switchSession } = useSession()
-
-  // Agent status polling — lightweight fetch every 5s for toolbar indicators
-  const [agentSummary, setAgentSummary] = useState<{
-    activeCount: number
-    conversations: Array<{
-      id: string
-      title: string
-      currentPhase: string
-      iterationCount: number
-      agentRunning: boolean
-      sessionId: string
-    }>
-  }>({ activeCount: 0, conversations: [] })
-
-  useEffect(() => {
-    if (!projectId || !userId) return
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch(`/api/conversations?projectId=${projectId}&userId=${userId}`)
-        if (!res.ok) return
-        const convs = await res.json()
-        const active = convs.filter((c: any) => c.agentRunning)
-        setAgentSummary({ activeCount: active.length, conversations: convs })
-      } catch { /* ignore fetch errors */ }
-    }
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 5000)
-    return () => clearInterval(interval)
-  }, [projectId, userId])
+  const { sessionId, resetSession } = useSession()
 
   // Tunnel status polling — check every 10s which tunnels are active
   const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus>()
@@ -120,13 +92,9 @@ export default function GraphPage() {
   // Check if recon is running to enable auto-refresh of graph data
   const isReconRunning = reconState?.status === 'running' || reconState?.status === 'starting'
 
-  // Check if any agent conversation is active (writes attack chain nodes to graph)
-  const isAgentRunning = agentSummary.activeCount > 0
-
-  // Graph data with auto-refresh every 5 seconds while recon or agent is running
+  // Graph data with auto-refresh every 5 seconds while recon is running
   const { data, isLoading, error, refetch: refetchGraph } = useGraphData(projectId, {
     isReconRunning,
-    isAgentRunning,
   })
 
   // Recon logs SSE hook
@@ -199,202 +167,6 @@ export default function GraphPage() {
     fastPoll: activeView === 'sessions',
   })
 
-  // ── Table view state (lifted from DataTable) ──────────────────────────
-  const tableRows = useTableData(data)
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [activeNodeTypes, setActiveNodeTypes] = useState<Set<string>>(new Set())
-  const [tableInitialized, setTableInitialized] = useState(false)
-
-  const nodeTypeCounts = useMemo(() => {
-    const counts: Record<string, number> = {}
-    tableRows.forEach(r => {
-      counts[r.node.type] = (counts[r.node.type] || 0) + 1
-    })
-    return counts
-  }, [tableRows])
-
-  const nodeTypes = useMemo(() => Object.keys(nodeTypeCounts).sort(), [nodeTypeCounts])
-
-  useEffect(() => {
-    if (nodeTypes.length > 0 && !tableInitialized) {
-      setActiveNodeTypes(new Set(nodeTypes))
-      setTableInitialized(true)
-    } else if (tableInitialized) {
-      // Auto-enable newly discovered node types (e.g. attack chain nodes created mid-session)
-      setActiveNodeTypes((prev: Set<string>) => {
-        const newTypes = nodeTypes.filter((t: string) => !prev.has(t))
-        if (newTypes.length === 0) return prev
-        const next = new Set(prev)
-        newTypes.forEach((t: string) => next.add(t))
-        return next
-      })
-    }
-  }, [nodeTypes, tableInitialized])
-
-  const filteredByTypeOnly = useMemo(() => {
-    if (activeNodeTypes.size === 0) return []
-    return tableRows.filter(r => activeNodeTypes.has(r.node.type))
-  }, [tableRows, activeNodeTypes])
-
-  // ── Session (chain) visibility ──────────────────────────────────────
-  const CHAIN_NODE_TYPES = useMemo(() => new Set([
-    'AttackChain', 'ChainStep', 'ChainDecision', 'ChainFailure', 'ChainFinding',
-  ]), [])
-
-  const sessionChainIds = useMemo(() => {
-    if (!data) return []
-    const ids = new Set<string>()
-    for (const node of data.nodes) {
-      const chainId = node.properties?.chain_id as string | undefined
-      if (chainId && CHAIN_NODE_TYPES.has(node.type)) {
-        ids.add(chainId)
-      }
-    }
-    return Array.from(ids).sort()
-  }, [data, CHAIN_NODE_TYPES])
-
-  const sessionTitles = useMemo(() => {
-    if (!data) return {} as Record<string, string>
-    const titles: Record<string, string> = {}
-    for (const node of data.nodes) {
-      if (node.type === 'AttackChain') {
-        const chainId = node.properties?.chain_id as string | undefined
-        const title = node.properties?.title as string | undefined
-        if (chainId && title) {
-          titles[chainId] = title
-        }
-      }
-    }
-    return titles
-  }, [data])
-
-  const [hiddenSessions, setHiddenSessions] = useState<Set<string>>(new Set())
-
-  // Auto-show newly discovered sessions
-  useEffect(() => {
-    setHiddenSessions((prev: Set<string>) => {
-      const updated = new Set<string>()
-      for (const id of prev) {
-        if (sessionChainIds.includes(id)) updated.add(id)
-      }
-      return updated.size !== prev.size ? updated : prev
-    })
-  }, [sessionChainIds])
-
-  const handleToggleSession = useCallback((chainId: string) => {
-    setHiddenSessions((prev: Set<string>) => {
-      const next = new Set(prev)
-      if (next.has(chainId)) next.delete(chainId)
-      else next.add(chainId)
-      return next
-    })
-  }, [])
-
-  const handleShowAllSessions = useCallback(() => {
-    setHiddenSessions(new Set())
-  }, [])
-
-  const handleHideAllSessions = useCallback(() => {
-    setHiddenSessions(new Set(sessionChainIds))
-  }, [sessionChainIds])
-
-  // "Hide other chains" / "Show all" toggle for the AI drawer
-  const isOtherChainsHidden = useMemo(() => {
-    if (hiddenSessions.size === 0) return false
-    const otherChains = sessionChainIds.filter((id: string) => id !== sessionId)
-    if (otherChains.length === 0) return false
-    return otherChains.every((id: string) => hiddenSessions.has(id))
-  }, [hiddenSessions, sessionChainIds, sessionId])
-
-  const handleToggleOtherChains = useCallback(() => {
-    const otherChains = sessionChainIds.filter((id: string) => id !== sessionId)
-    setHiddenSessions((prev: Set<string>) => {
-      const allOthersHidden = otherChains.every((id: string) => prev.has(id))
-      if (allOthersHidden) {
-        return new Set()
-      } else {
-        return new Set(otherChains)
-      }
-    })
-  }, [sessionChainIds, sessionId])
-  // ── End session visibility ────────────────────────────────────────
-
-  // Table rows filtered by type + hidden sessions
-  const filteredByType = useMemo(() => {
-    if (hiddenSessions.size === 0) return filteredByTypeOnly
-    return filteredByTypeOnly.filter((r: { node: { type: string; properties: Record<string, unknown> } }) => {
-      if (CHAIN_NODE_TYPES.has(r.node.type)) {
-        const chainId = r.node.properties?.chain_id as string | undefined
-        if (chainId && hiddenSessions.has(chainId)) return false
-      }
-      return true
-    })
-  }, [filteredByTypeOnly, hiddenSessions, CHAIN_NODE_TYPES])
-
-  // Filtered graph data for GraphCanvas (filter nodes by type + hidden sessions, then prune links)
-  const filteredGraphData = useMemo(() => {
-    if (!data) return undefined
-    const allTypesActive = activeNodeTypes.size === nodeTypes.length
-    const noSessionsHidden = hiddenSessions.size === 0
-    if (allTypesActive && noSessionsHidden) return data // nothing filtered
-    const filteredNodes = data.nodes.filter(n => {
-      if (!activeNodeTypes.has(n.type)) return false
-      // Hide chain nodes belonging to hidden sessions
-      if (hiddenSessions.size > 0 && CHAIN_NODE_TYPES.has(n.type)) {
-        const chainId = n.properties?.chain_id as string | undefined
-        if (chainId && hiddenSessions.has(chainId)) return false
-      }
-      return true
-    })
-    const visibleIds = new Set(filteredNodes.map(n => n.id))
-    const filteredLinks = data.links.filter(l => {
-      const srcId = typeof l.source === 'string' ? l.source : l.source.id
-      const tgtId = typeof l.target === 'string' ? l.target : l.target.id
-      return visibleIds.has(srcId) && visibleIds.has(tgtId)
-    })
-    return { ...data, nodes: filteredNodes, links: filteredLinks }
-  }, [data, activeNodeTypes, nodeTypes.length, hiddenSessions, CHAIN_NODE_TYPES])
-
-  const textFilteredCount = useMemo(() => {
-    if (!globalFilter) return filteredByType.length
-    const search = globalFilter.toLowerCase()
-    return filteredByType.filter(r =>
-      r.node.name?.toLowerCase().includes(search) ||
-      r.node.type?.toLowerCase().includes(search)
-    ).length
-  }, [filteredByType, globalFilter])
-
-  const handleToggleNodeType = useCallback((type: string) => {
-    setActiveNodeTypes(prev => {
-      const next = new Set(prev)
-      if (next.has(type)) next.delete(type)
-      else next.add(type)
-      return next
-    })
-  }, [])
-
-  const handleSelectAllTypes = useCallback(() => {
-    setActiveNodeTypes(new Set(nodeTypes))
-  }, [nodeTypes])
-
-  const handleClearAllTypes = useCallback(() => {
-    setActiveNodeTypes(new Set())
-  }, [])
-
-  const handleExportExcel = useCallback(() => {
-    let rows = filteredByType
-    if (globalFilter) {
-      const search = globalFilter.toLowerCase()
-      rows = rows.filter(r =>
-        r.node.name?.toLowerCase().includes(search) ||
-        r.node.type?.toLowerCase().includes(search)
-      )
-    }
-    exportToExcel(rows)
-  }, [filteredByType, globalFilter])
-
-  // ── End table view state ──────────────────────────────────────────────
-
   // Check if recon data exists
   const checkReconData = useCallback(async () => {
     if (!projectId) return
@@ -465,36 +237,51 @@ export default function GraphPage() {
     }
   }, [projectId])
 
-  // Check for recon/GVM/GitHub Hunt data on mount and when project changes
+  // Check if PDF report data exists
+  const checkPDFData = useCallback(async () => {
+    if (!projectId) return
+    try {
+      const response = await fetch(`/api/reports/${projectId}/data`, { method: 'HEAD' })
+      setHasPDFData(response.ok)
+    } catch {
+      setHasPDFData(false)
+    }
+  }, [projectId])
+
+  // Check for recon/GVM/GitHub Hunt/PDF data on mount and when project changes
   useEffect(() => {
     checkReconData()
     checkGvmData()
     checkGithubHuntData()
-  }, [checkReconData, checkGvmData, checkGithubHuntData])
+    checkPDFData()
+  }, [checkReconData, checkGvmData, checkGithubHuntData, checkPDFData])
 
   // Refresh graph data when recon completes
   useEffect(() => {
     if (reconState?.status === 'completed' || reconState?.status === 'error') {
       refetchGraph()
       checkReconData()
+      checkPDFData()
     }
-  }, [reconState?.status, refetchGraph, checkReconData])
+  }, [reconState?.status, refetchGraph, checkReconData, checkPDFData])
 
   // Refresh graph when GVM scan completes
   useEffect(() => {
     if (gvmState?.status === 'completed' || gvmState?.status === 'error') {
       refetchGraph()
       checkGvmData()
+      checkPDFData()
     }
-  }, [gvmState?.status, refetchGraph, checkGvmData])
+  }, [gvmState?.status, refetchGraph, checkGvmData, checkPDFData])
 
   // Refresh when GitHub Hunt completes
   useEffect(() => {
     if (githubHuntState?.status === 'completed' || githubHuntState?.status === 'error') {
       refetchGraph()
       checkGithubHuntData()
+      checkPDFData()
     }
-  }, [githubHuntState?.status, refetchGraph, checkGithubHuntData])
+  }, [githubHuntState?.status, refetchGraph, checkGithubHuntData, checkPDFData])
 
   const handleToggleAI = useCallback(() => {
     setIsAIOpen((prev) => !prev)
@@ -594,6 +381,7 @@ export default function GraphPage() {
     setActiveLogsDrawer(prev => prev === 'githubHunt' ? null : 'githubHunt')
   }, [])
 
+<<<<<<< Updated upstream
   // Pause/Resume/Stop handlers
   const handlePauseRecon = useCallback(async () => { await pauseRecon() }, [pauseRecon])
   const handleResumeRecon = useCallback(async () => { await resumeRecon() }, [resumeRecon])
@@ -604,6 +392,12 @@ export default function GraphPage() {
   const handlePauseGithubHunt = useCallback(async () => { await pauseGithubHunt() }, [pauseGithubHunt])
   const handleResumeGithubHunt = useCallback(async () => { await resumeGithubHunt() }, [resumeGithubHunt])
   const handleStopGithubHunt = useCallback(async () => { await stopGithubHunt() }, [stopGithubHunt])
+=======
+  const handleDownloadPDFReport = useCallback(async () => {
+    if (!projectId) return
+    window.open(`/api/reports/${projectId}/pdf`, '_blank')
+  }, [projectId])
+>>>>>>> Stashed changes
 
   // Show message if no project is selected
   if (!projectLoading && !projectId) {
@@ -663,8 +457,12 @@ export default function GraphPage() {
         githubHuntStatus={githubHuntState?.status || 'idle'}
         hasGithubHuntData={hasGithubHuntData}
         isGithubHuntLogsOpen={activeLogsDrawer === 'githubHunt'}
+        // PDF Report
+        onDownloadPDFReport={handleDownloadPDFReport}
+        hasPDFData={hasPDFData}
         // Stealth mode
         stealthMode={currentProject?.stealthMode}
+<<<<<<< Updated upstream
         // Agent status
         agentActiveCount={agentSummary.activeCount}
         agentConversations={agentSummary.conversations}
@@ -680,19 +478,20 @@ export default function GraphPage() {
         filteredRows={textFilteredCount}
         sessionCount={activeSessions.totalCount}
         tunnelStatus={tunnelStatus}
+=======
+>>>>>>> Stashed changes
       />
 
       <div ref={bodyRef} className={styles.body}>
-        {activeView === 'graph' && (
-          <NodeDrawer
-            node={selectedNode}
-            isOpen={drawerOpen}
-            onClose={clearSelection}
-            onDeleteNode={handleDeleteNode}
-          />
-        )}
+        <NodeDrawer
+          node={selectedNode}
+          isOpen={drawerOpen}
+          onClose={clearSelection}
+          onDeleteNode={handleDeleteNode}
+        />
 
         <div ref={contentRef} className={styles.content}>
+<<<<<<< Updated upstream
           {activeView === 'graph' ? (
             <GraphCanvas
               data={filteredGraphData}
@@ -730,6 +529,21 @@ export default function GraphPage() {
               onKillJob={activeSessions.killJob}
             />
           )}
+=======
+          <GraphCanvas
+            data={data}
+            isLoading={isLoading}
+            error={error}
+            projectId={projectId || ''}
+            is3D={is3D}
+            width={dimensions.width}
+            height={dimensions.height}
+            showLabels={showLabels}
+            selectedNode={selectedNode}
+            onNodeClick={selectNode}
+            isDark={isDark}
+          />
+>>>>>>> Stashed changes
         </div>
 
       </div>
@@ -786,15 +600,10 @@ export default function GraphPage() {
         projectId={projectId || ''}
         sessionId={sessionId || ''}
         onResetSession={resetSession}
-        onSwitchSession={switchSession}
         modelName={currentProject?.agentOpenaiModel}
         toolPhaseMap={currentProject?.agentToolPhaseMap}
         stealthMode={currentProject?.stealthMode}
         onToggleStealth={handleToggleStealth}
-        onRefetchGraph={refetchGraph}
-        isOtherChainsHidden={isOtherChainsHidden}
-        onToggleOtherChains={handleToggleOtherChains}
-        hasOtherChains={sessionChainIds.length > 1 || (sessionChainIds.length === 1 && sessionChainIds[0] !== sessionId)}
       />
 
       <ReconConfirmModal
@@ -820,23 +629,9 @@ export default function GraphPage() {
         error={gvmError}
       />
 
-      <PageBottomBar
-        data={data}
-        is3D={is3D}
-        showLabels={showLabels}
-        activeView={activeView}
-        activeNodeTypes={activeNodeTypes}
-        nodeTypeCounts={nodeTypeCounts}
-        onToggleNodeType={handleToggleNodeType}
-        onSelectAllTypes={handleSelectAllTypes}
-        onClearAllTypes={handleClearAllTypes}
-        sessionChainIds={sessionChainIds}
-        sessionTitles={sessionTitles}
-        hiddenSessions={hiddenSessions}
-        onToggleSession={handleToggleSession}
-        onShowAllSessions={handleShowAllSessions}
-        onHideAllSessions={handleHideAllSessions}
-      />
+      <PageBottomBar data={data} is3D={is3D} showLabels={showLabels} activeView={activeView} />
     </div>
   )
 }
+
+

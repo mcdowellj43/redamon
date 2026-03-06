@@ -1454,12 +1454,23 @@ def run_http_probe(recon_data: dict, output_file: Path = None, settings: dict = 
         # Build and run command
         cmd = build_httpx_command(str(targets_file), str(httpx_output), settings, use_proxy)
 
+        # Validate Docker command before execution
+        if not cmd or len(cmd) < 3:
+            print(f"    [!] Invalid Docker command generated: {cmd}")
+            return recon_data
+
+        # Validate input file exists and is readable
+        if not targets_file.exists() or targets_file.stat().st_size == 0:
+            print(f"    [!] Targets file is empty or doesn't exist: {targets_file}")
+            return recon_data
+
         print(f"\n[*] Starting httpx probe...")
         print(f"    [*] URLs to probe: {len(urls)}")
         print(f"    [*] Threads: {HTTPX_THREADS}")
         print(f"    [*] Timeout: {HTTPX_TIMEOUT}s")
         print(f"    [*] Rate limit: {HTTPX_RATE_LIMIT} req/s")
         print(f"    [*] Follow redirects: {HTTPX_FOLLOW_REDIRECTS}")
+        print(f"    [*] Docker command: {' '.join(cmd[:8])}...")  # Show first 8 parts to avoid exposing paths
 
         if HTTPX_PROBE_TECH_DETECT:
             print(f"    [*] Technology detection: enabled")
@@ -1479,14 +1490,40 @@ def run_http_probe(recon_data: dict, output_file: Path = None, settings: dict = 
             text=True
         )
 
-        _, stderr = process.communicate(timeout=1800)  # 30 min timeout
+        stdout, stderr = process.communicate(timeout=1800)  # 30 min timeout
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
-        if process.returncode != 0 and not httpx_output.exists():
-            print(f"    [!] Probe failed: {stderr[:200] if stderr else 'Unknown error'}")
+        # Comprehensive error checking for httpx execution
+        if process.returncode != 0:
+            print(f"    [!] httpx process failed with return code {process.returncode}")
+            if stderr:
+                print(f"    [!] Error output: {stderr[:300]}")
+            if stdout:
+                print(f"    [!] Standard output: {stdout[:300]}")
+            if not httpx_output.exists():
+                print(f"    [!] Output file was not created: {httpx_output}")
+                return recon_data
+            else:
+                print(f"    [!] Output file exists but process failed - checking if usable")
+
+        # Check if output file exists and has content
+        if not httpx_output.exists():
+            print(f"    [!] httpx output file was not created: {httpx_output}")
+            print(f"    [!] Docker command was: {' '.join(cmd)}")
             return recon_data
+
+        # Check if output file is empty
+        if httpx_output.stat().st_size == 0:
+            print(f"    [!] httpx output file is empty (0 bytes)")
+            print(f"    [!] This suggests httpx found no live targets or failed silently")
+            if stderr:
+                print(f"    [!] Stderr from httpx: {stderr[:300]}")
+            if stdout:
+                print(f"    [!] Stdout from httpx: {stdout[:300]}")
+            print(f"    [!] Input file contained {len(urls)} URLs")
+            # Still continue parsing to return proper empty structure
 
         # Parse results (filter URLs outside target scope)
         print(f"\n[*] Parsing results...")
@@ -1537,12 +1574,26 @@ def run_http_probe(recon_data: dict, output_file: Path = None, settings: dict = 
             "summary": results["summary"]
         }
 
-        # Print summary
+        # Validate results and provide warnings
         summary = results["summary"]
+
+        if summary.get('live_urls', 0) == 0:
+            print(f"\n[!] WARNING: HTTP probe found 0 live URLs")
+            print(f"    [!] This could indicate:")
+            print(f"    [!] - All targets are down/unreachable")
+            print(f"    [!] - Network connectivity issues")
+            print(f"    [!] - Docker networking problems")
+            print(f"    [!] - Target URLs were malformed")
+            print(f"    [!] - httpx filtering was too aggressive")
+            if len(urls) > 0:
+                print(f"    [!] Built {len(urls)} URLs but none responded successfully")
+                print(f"    [!] Sample URLs: {urls[:3]}")
+
+        # Print summary
         print(f"\n[✓] Probe completed in {duration:.1f} seconds")
-        print(f"    [*] URLs probed: {summary['total_urls_probed']}")
-        print(f"    [*] Live URLs: {summary['live_urls']}")
-        print(f"    [*] Unique hosts: {summary['total_hosts']}")
+        print(f"    [*] URLs probed: {summary.get('total_urls_probed', 0)}")
+        print(f"    [*] Live URLs: {summary.get('live_urls', 0)}")
+        print(f"    [*] Unique hosts: {summary.get('total_hosts', 0)}")
 
         if summary.get('technology_count', 0) > 0:
             print(f"    [*] Technologies detected: {summary['technology_count']}")
@@ -1554,6 +1605,8 @@ def run_http_probe(recon_data: dict, output_file: Path = None, settings: dict = 
             codes = summary['by_status_code']
             code_str = ", ".join([f"{k}:{v}" for k, v in sorted(codes.items())[:5]])
             print(f"    [*] Status codes: {code_str}")
+        else:
+            print(f"    [!] No HTTP status codes recorded (no successful probes)")
 
         # Enhance with Wappalyzer (uses existing HTML from httpx)
         httpx_results = enhance_with_wappalyzer(httpx_results, settings)
@@ -1562,8 +1615,21 @@ def run_http_probe(recon_data: dict, output_file: Path = None, settings: dict = 
         for url_data in httpx_results.get("by_url", {}).values():
             url_data.pop("body", None)
 
-        # Add to recon_data
+        # Add to recon_data (ensure we always have valid structure)
         recon_data["http_probe"] = httpx_results
+
+        # Final validation - ensure http_probe data exists and is valid
+        if not recon_data.get("http_probe") or not isinstance(recon_data["http_probe"], dict):
+            print(f"    [!] ERROR: http_probe data is invalid or missing")
+            # Create minimal valid structure to prevent Neo4j errors
+            recon_data["http_probe"] = {
+                "scan_metadata": {"scan_timestamp": start_time.isoformat(), "scan_duration_seconds": round(duration, 2)},
+                "by_url": {},
+                "by_host": {},
+                "technologies_found": {},
+                "servers_found": {},
+                "summary": {"live_urls": 0, "total_hosts": 0, "total_urls_probed": len(urls)}
+            }
 
         # Run banner grabbing for non-HTTP ports
         if BANNER_GRAB_ENABLED and recon_data.get("port_scan"):
@@ -1582,9 +1648,23 @@ def run_http_probe(recon_data: dict, output_file: Path = None, settings: dict = 
 
     except subprocess.TimeoutExpired:
         print("[!] Probe timed out after 30 minutes")
+        # Ensure we have valid http_probe structure even on timeout
+        if "http_probe" not in recon_data:
+            recon_data["http_probe"] = {
+                "scan_metadata": {"error": "timeout", "scan_duration_seconds": 1800},
+                "by_url": {}, "by_host": {}, "technologies_found": {}, "servers_found": {},
+                "summary": {"live_urls": 0, "total_hosts": 0, "total_urls_probed": 0}
+            }
         return recon_data
     except Exception as e:
         print(f"[!] Error during probe: {e}")
+        # Ensure we have valid http_probe structure even on error
+        if "http_probe" not in recon_data:
+            recon_data["http_probe"] = {
+                "scan_metadata": {"error": str(e)},
+                "by_url": {}, "by_host": {}, "technologies_found": {}, "servers_found": {},
+                "summary": {"live_urls": 0, "total_hosts": 0, "total_urls_probed": 0}
+            }
         return recon_data
     finally:
         # Cleanup temp files

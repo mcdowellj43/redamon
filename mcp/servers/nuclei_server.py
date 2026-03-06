@@ -66,28 +66,51 @@ def execute_nuclei(args: str) -> str:
     """
     try:
         cmd_args = shlex.split(args)
+
+        # Add progress indicators and reduce timeout for better responsiveness
+        if "-silent" not in cmd_args:
+            cmd_args.append("-silent")
+        if "-nc" not in cmd_args:  # No color for clean output
+            cmd_args.append("-nc")
+
+        # Use shorter timeout to prevent client disconnection
         result = subprocess.run(
             ["nuclei"] + cmd_args,
             capture_output=True,
             text=True,
-            timeout=600
+            timeout=120  # Reduced from 600 to 120 seconds
         )
-        output = result.stdout
+
+        output = result.stdout.strip()
+        error_output = ""
+
         if result.stderr:
-            # Filter out progress/info messages
+            # Filter out progress/info messages but keep actual errors
             stderr_lines = [
                 line for line in result.stderr.split('\n')
-                if line and not any(x in line for x in ['[INF]', '[WRN]', 'Templates Loaded'])
+                if line and not any(x in line.lower() for x in [
+                    '[inf]', '[wrn]', 'templates loaded', 'nuclei engine',
+                    'config directory', 'cache directory', 'pdcp directory'
+                ])
             ]
             if stderr_lines:
-                output += f"\n[STDERR]: {chr(10).join(stderr_lines)}"
-        return output if output.strip() else "[INFO] No vulnerabilities found"
+                error_output = f"\n[STDERR]: {chr(10).join(stderr_lines)}"
+
+        # Provide meaningful response based on results
+        if result.returncode != 0:
+            return f"[ERROR] Nuclei execution failed (exit code: {result.returncode}){error_output}"
+
+        if output:
+            return output + error_output
+        else:
+            return "[INFO] Scan completed - No vulnerabilities found" + error_output
+
     except subprocess.TimeoutExpired:
-        return "[ERROR] Command timed out after 600 seconds. Consider reducing scope or using specific templates."
+        return "[ERROR] Command timed out after 120 seconds. Try using specific templates or reducing target scope with -t <template> or -severity critical,high"
     except FileNotFoundError:
         return "[ERROR] nuclei not found. Ensure it is installed and in PATH."
     except Exception as e:
-        return f"[ERROR] {str(e)}"
+        return f"[ERROR] Unexpected error: {str(e)}"
 
 
 

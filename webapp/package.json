@@ -1,7 +1,7 @@
 {
   "name": "redamon-webapp",
-  "version": "1.0.0",
-  "description": "RedAmon - AI Red Team application",
+  "version": "2.1.0",
+  "description": "RedAmon Web Application - Security Reconnaissance Dashboard",
   "private": true,
   "scripts": {
     "dev": "next dev",

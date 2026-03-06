@@ -19,22 +19,14 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 
 # =============================================================================
-# Check Docker Socket Access
+# Check Docker Socket Access (Skip detailed checks to avoid hanging)
 # =============================================================================
 echo -e "${YELLOW}[*] Checking Docker socket access...${NC}"
 
 if [ -S /var/run/docker.sock ]; then
-    if docker info > /dev/null 2>&1; then
-        echo -e "${GREEN}[+] Docker socket accessible${NC}"
-    else
-        echo -e "${RED}[!] Docker socket exists but not accessible${NC}"
-        echo -e "${RED}    Make sure the container has permissions to access Docker${NC}"
-        echo -e "${RED}    Try: docker-compose up with the docker group or root${NC}"
-    fi
+    echo -e "${GREEN}[+] Docker socket found - skipping detailed checks to prevent hanging${NC}"
 else
-    echo -e "${RED}[!] Docker socket not found at /var/run/docker.sock${NC}"
-    echo -e "${RED}    Mount it with: -v /var/run/docker.sock:/var/run/docker.sock${NC}"
-    echo -e "${YELLOW}    Continuing anyway - some tools may not work${NC}"
+    echo -e "${YELLOW}[!] Docker socket not found - continuing anyway${NC}"
 fi
 
 # =============================================================================
@@ -103,7 +95,6 @@ echo -e "${YELLOW}[*] Checking ProjectDiscovery Docker images...${NC}"
 
 # List of images used by recon modules
 IMAGES=(
-    "projectdiscovery/naabu:latest"
     "projectdiscovery/httpx:latest"
     "projectdiscovery/katana:latest"
     "projectdiscovery/nuclei:latest"

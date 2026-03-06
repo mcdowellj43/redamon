@@ -186,7 +186,9 @@ class ContainerManager:
                 name=container_name,
                 detach=True,
                 network_mode="host",
-                privileged=True,
+                cap_add=["NET_RAW", "NET_ADMIN"],
+                user="root",  # Run as root to access Docker socket
+                privileged=True,  # Enable privileged mode for Docker-in-Docker
                 environment={
                     "PROJECT_ID": project_id,
                     "USER_ID": user_id,

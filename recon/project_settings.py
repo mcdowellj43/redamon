@@ -43,20 +43,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     'WHOIS_MAX_RETRIES': 6,
     'DNS_MAX_RETRIES': 3,
 
-    # Naabu Port Scanner
-    'NAABU_DOCKER_IMAGE': 'projectdiscovery/naabu:latest',
-    'NAABU_TOP_PORTS': '1000',
-    'NAABU_CUSTOM_PORTS': '',
-    'NAABU_RATE_LIMIT': 1000,
-    'NAABU_THREADS': 25,
-    'NAABU_TIMEOUT': 10000,
-    'NAABU_RETRIES': 1,
-    'NAABU_SCAN_TYPE': 's',
-    'NAABU_EXCLUDE_CDN': False,
-    'NAABU_DISPLAY_CDN': True,
-    'NAABU_SKIP_HOST_DISCOVERY': True,
-    'NAABU_VERIFY_PORTS': True,
-    'NAABU_PASSIVE_MODE': False,
+    # Nmap Port Scanner
+    'NMAP_TOP_PORTS': '1000',
+    'NMAP_CUSTOM_PORTS': '',
+    'NMAP_SCAN_TYPE': 'T',  # TCP connect scan (unprivileged mode)
+    'NMAP_SERVICE_DETECTION': True,
+    'NMAP_OS_DETECTION': False,
+    'NMAP_AGGRESSIVE': False,
+    'NMAP_SCRIPT_SCAN': True,
+    'NMAP_TIMING': '4',  # T4 timing
+    'NMAP_OUTPUT_XML': True,
 
     # httpx HTTP Probing
     'HTTPX_DOCKER_IMAGE': 'projectdiscovery/httpx:latest',
@@ -341,20 +337,16 @@ def fetch_project_settings(project_id: str, webapp_url: str) -> dict[str, Any]:
     settings['WHOIS_MAX_RETRIES'] = project.get('whoisMaxRetries', DEFAULT_SETTINGS['WHOIS_MAX_RETRIES'])
     settings['DNS_MAX_RETRIES'] = project.get('dnsMaxRetries', DEFAULT_SETTINGS['DNS_MAX_RETRIES'])
 
-    # Naabu Port Scanner
-    settings['NAABU_DOCKER_IMAGE'] = project.get('naabuDockerImage', DEFAULT_SETTINGS['NAABU_DOCKER_IMAGE'])
-    settings['NAABU_TOP_PORTS'] = project.get('naabuTopPorts', DEFAULT_SETTINGS['NAABU_TOP_PORTS'])
-    settings['NAABU_CUSTOM_PORTS'] = project.get('naabuCustomPorts', DEFAULT_SETTINGS['NAABU_CUSTOM_PORTS'])
-    settings['NAABU_RATE_LIMIT'] = project.get('naabuRateLimit', DEFAULT_SETTINGS['NAABU_RATE_LIMIT'])
-    settings['NAABU_THREADS'] = project.get('naabuThreads', DEFAULT_SETTINGS['NAABU_THREADS'])
-    settings['NAABU_TIMEOUT'] = project.get('naabuTimeout', DEFAULT_SETTINGS['NAABU_TIMEOUT'])
-    settings['NAABU_RETRIES'] = project.get('naabuRetries', DEFAULT_SETTINGS['NAABU_RETRIES'])
-    settings['NAABU_SCAN_TYPE'] = project.get('naabuScanType', DEFAULT_SETTINGS['NAABU_SCAN_TYPE'])
-    settings['NAABU_EXCLUDE_CDN'] = project.get('naabuExcludeCdn', DEFAULT_SETTINGS['NAABU_EXCLUDE_CDN'])
-    settings['NAABU_DISPLAY_CDN'] = project.get('naabuDisplayCdn', DEFAULT_SETTINGS['NAABU_DISPLAY_CDN'])
-    settings['NAABU_SKIP_HOST_DISCOVERY'] = project.get('naabuSkipHostDiscovery', DEFAULT_SETTINGS['NAABU_SKIP_HOST_DISCOVERY'])
-    settings['NAABU_VERIFY_PORTS'] = project.get('naabuVerifyPorts', DEFAULT_SETTINGS['NAABU_VERIFY_PORTS'])
-    settings['NAABU_PASSIVE_MODE'] = project.get('naabuPassiveMode', DEFAULT_SETTINGS['NAABU_PASSIVE_MODE'])
+    # Nmap Port Scanner
+    settings['NMAP_TOP_PORTS'] = project.get('nmapTopPorts', DEFAULT_SETTINGS['NMAP_TOP_PORTS'])
+    settings['NMAP_CUSTOM_PORTS'] = project.get('nmapCustomPorts', DEFAULT_SETTINGS['NMAP_CUSTOM_PORTS'])
+    settings['NMAP_SCAN_TYPE'] = project.get('nmapScanType', DEFAULT_SETTINGS['NMAP_SCAN_TYPE'])
+    settings['NMAP_SERVICE_DETECTION'] = project.get('nmapServiceDetection', DEFAULT_SETTINGS['NMAP_SERVICE_DETECTION'])
+    settings['NMAP_OS_DETECTION'] = project.get('nmapOsDetection', DEFAULT_SETTINGS['NMAP_OS_DETECTION'])
+    settings['NMAP_AGGRESSIVE'] = project.get('nmapAggressive', DEFAULT_SETTINGS['NMAP_AGGRESSIVE'])
+    settings['NMAP_SCRIPT_SCAN'] = project.get('nmapScriptScan', DEFAULT_SETTINGS['NMAP_SCRIPT_SCAN'])
+    settings['NMAP_TIMING'] = project.get('nmapTiming', DEFAULT_SETTINGS['NMAP_TIMING'])
+    settings['NMAP_OUTPUT_XML'] = project.get('nmapOutputXml', DEFAULT_SETTINGS['NMAP_OUTPUT_XML'])
 
     # httpx HTTP Probing
     settings['HTTPX_DOCKER_IMAGE'] = project.get('httpxDockerImage', DEFAULT_SETTINGS['HTTPX_DOCKER_IMAGE'])
@@ -611,12 +603,12 @@ def apply_stealth_overrides(settings: dict[str, Any]) -> dict[str, Any]:
 
     logger.info("STEALTH MODE ENABLED — applying passive/low-noise overrides to all recon tools")
 
-    # --- Naabu Port Scanner: passive mode only ---
-    settings['NAABU_PASSIVE_MODE'] = True
-    settings['NAABU_RATE_LIMIT'] = 10
-    settings['NAABU_THREADS'] = 1
-    settings['NAABU_SCAN_TYPE'] = 'c'  # CONNECT scan (no raw SYN)
-    settings['NAABU_SKIP_HOST_DISCOVERY'] = True
+    # --- Nmap Port Scanner: stealthy scans only ---
+    settings['NMAP_SCAN_TYPE'] = 'sT'  # TCP Connect scan (no raw SYN)
+    settings['NMAP_TIMING'] = '1'      # T1 paranoid timing
+    settings['NMAP_OS_DETECTION'] = False  # No OS fingerprinting
+    settings['NMAP_SCRIPT_SCAN'] = False   # No NSE scripts
+    settings['NMAP_SERVICE_DETECTION'] = False  # No version detection
 
     # --- httpx HTTP Probing: low-rate, disable fingerprinting ---
     settings['HTTPX_THREADS'] = 1
@@ -672,7 +664,7 @@ def apply_stealth_overrides(settings: dict[str, Any]) -> dict[str, Any]:
     settings['SECURITY_CHECK_NO_RATE_LIMITING'] = False
     # Passive checks remain enabled (SPF, DMARC, DNSSEC, TLS expiry, headers)
 
-    logger.info("Stealth overrides applied: Naabu=passive, httpx=low-rate, Katana=minimal, "
+    logger.info("Stealth overrides applied: Nmap=stealthy, httpx=low-rate, Katana=minimal, "
                 "Nuclei=no-DAST, Kiterunner=OFF, BannerGrab=OFF, BruteForce=OFF, "
                 "ActiveSecurityChecks=OFF")
 

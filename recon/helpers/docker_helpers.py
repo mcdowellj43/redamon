@@ -25,13 +25,26 @@ def is_docker_installed() -> bool:
 def is_docker_running() -> bool:
     """Check if Docker daemon is running."""
     try:
+        # First check if docker command exists
+        result = subprocess.run(
+            ["docker", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode != 0:
+            return False
+
+        # Try docker info, but be more permissive with the response
         result = subprocess.run(
             ["docker", "info"],
             capture_output=True,
             text=True,
             timeout=10
         )
-        return result.returncode == 0
+        # Consider it working if docker info produces any output, even with errors
+        # This handles cases where docker works but info has minor issues
+        return len(result.stdout.strip()) > 0 or result.returncode == 0
     except Exception:
         return False
 

@@ -59,6 +59,9 @@ interface GraphToolbarProps {
     agentRunning: boolean
     sessionId: string
   }>
+  // PDF Report props
+  onDownloadPDFReport?: () => void
+  hasPDFData?: boolean
 }
 
 export function GraphToolbar({
@@ -107,6 +110,9 @@ export function GraphToolbar({
   // Agent status
   agentActiveCount = 0,
   agentConversations = [],
+  // PDF Report props
+  onDownloadPDFReport,
+  hasPDFData = false,
 }: GraphToolbarProps) {
   const isReconBusy = reconStatus === 'running' || reconStatus === 'starting'
   const isReconStopping = reconStatus === 'stopping'

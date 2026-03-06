@@ -41,6 +41,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     netcat-openbsd \
     iputils-ping \
+    # Nmap port scanner
+    nmap \
     # Git for knock-subdomains installation
     git \
     # Build dependencies for Python packages

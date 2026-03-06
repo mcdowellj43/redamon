@@ -1,25 +1,27 @@
 """
-RedAmon - Port Scanner Module
+RedAmon - Port Scanner Module (NMAP-based)
 
-Fast, lightweight port scanning.
-Runs via Docker for consistent environment and no installation required.
+Fast, comprehensive port scanning using nmap via MCP server.
+Provides deep service detection, OS fingerprinting, and NSE scripting.
 
 Features:
 - SYN and CONNECT scan modes
-- Service detection
-- CDN/WAF detection
-- Passive mode via Shodan InternetDB
+- Service version detection
+- OS fingerprinting
+- NSE vulnerability scripts
 - JSON output with structured results
 """
 
 import json
 import subprocess
-import shutil
-import os
+import shlex
+import time
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Optional
 import sys
+import re
+import xml.etree.ElementTree as ET
 
 # Add project root to path for imports
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -32,70 +34,56 @@ from helpers.iana_services import get_service_name_friendly as get_service_name
 
 
 # =============================================================================
-# Docker Helper Functions
+# NMAP Direct Execution Functions
 # =============================================================================
 
-def is_docker_installed() -> bool:
-    """Check if Docker is installed."""
-    return shutil.which("docker") is not None
-
-
-def is_docker_running() -> bool:
-    """Check if Docker daemon is running."""
+def is_nmap_available() -> bool:
+    """Check if nmap is installed and accessible."""
     try:
         result = subprocess.run(
-            ["docker", "info"],
+            ["nmap", "--version"],
             capture_output=True,
             text=True,
             timeout=10
         )
-        return result.returncode == 0
+        return result.returncode == 0 and "Nmap" in result.stdout
     except Exception:
         return False
 
 
-def pull_naabu_docker_image(docker_image: str) -> bool:
-    """Pull the Naabu Docker image if not present."""
-    print(f"    [*] Checking Naabu Docker image: {docker_image}")
-
-    # Check if image exists
-    result = subprocess.run(
-        ["docker", "images", "-q", docker_image],
-        capture_output=True,
-        text=True
-    )
-
-    if result.stdout.strip():
-        print(f"    [✓] Image already available")
-        return True
-
-    print(f"    [*] Pulling image (this may take a moment)...")
-    result = subprocess.run(
-        ["docker", "pull", docker_image],
-        capture_output=True,
-        text=True,
-        timeout=300
-    )
-
-    if result.returncode == 0:
-        print(f"    [✓] Image pulled successfully")
-        return True
-    else:
-        print(f"    [!] Failed to pull image: {result.stderr[:200]}")
-        return False
-
-
-def is_tor_running() -> bool:
-    """Check if Tor SOCKS proxy is available."""
+def execute_nmap_direct(args: str) -> str:
+    """Execute nmap command directly."""
     try:
-        import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(2)
-        result = sock.connect_ex(('127.0.0.1', 9050))
-        sock.close()
-        return result == 0
-    except Exception:
-        return False
+        cmd_args = shlex.split(args)
+        result = subprocess.run(
+            ["nmap"] + cmd_args,
+            capture_output=True,
+            text=True,
+            timeout=600
+        )
+
+        # Check if nmap failed
+        if result.returncode != 0:
+            error_msg = f"[ERROR] NMAP failed with exit code {result.returncode}"
+            if result.stderr:
+                error_msg += f"\nSTDERR: {result.stderr}"
+            if result.stdout:
+                error_msg += f"\nSTDOUT: {result.stdout}"
+            return error_msg
+
+        # Combine stdout and stderr
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[STDERR]: {result.stderr}"
+
+        return output if output.strip() else "[INFO] No results returned"
+
+    except subprocess.TimeoutExpired:
+        return "[ERROR] NMAP scan timed out after 10 minutes"
+    except FileNotFoundError:
+        return "[ERROR] nmap not found. Ensure it is installed and in PATH."
+    except Exception as e:
+        return f"[ERROR] Failed to execute nmap: {str(e)}"
 
 
 # =============================================================================
@@ -156,139 +144,85 @@ def extract_targets_from_recon(recon_data: dict) -> Tuple[Set[str], Set[str], Di
 
 
 # =============================================================================
-# Naabu Command Builder
+# NMAP Command Builder
 # =============================================================================
 
-def get_host_path(container_path: str) -> str:
+def build_nmap_command(targets: List[str], settings: dict) -> str:
     """
-    Convert container path to host path for Docker-in-Docker volume mounts.
-
-    When running inside a container with mounted volumes, sibling containers
-    need host paths, not container paths. This function translates paths
-    using the HOST_RECON_OUTPUT_PATH environment variable.
-
-    The recon container mounts: ./output:/app/recon/output
-    So /app/recon/output/* inside the container maps to <host>/recon/output/* on host.
-
-    /tmp/redamon is mounted to the same path inside and outside, so no translation needed.
-    """
-    # /tmp/redamon paths are the same inside and outside the container
-    if container_path.startswith("/tmp/redamon"):
-        return container_path
-
-    host_output_path = os.environ.get("HOST_RECON_OUTPUT_PATH", "")
-    container_output_path = "/app/recon/output"
-
-    if host_output_path and container_path.startswith(container_output_path):
-        # Replace container path with host path
-        return container_path.replace(container_output_path, host_output_path, 1)
-
-    # If not in container or path doesn't match, return as-is
-    return container_path
-
-
-def build_naabu_command(targets_file: str, output_file: str, settings: dict, use_proxy: bool = False) -> List[str]:
-    """
-    Build the Docker command for running Naabu.
+    Build the nmap command arguments.
 
     Args:
-        targets_file: Path to file containing targets (one per line)
-        output_file: Path for JSON output
+        targets: List of targets (IPs/hostnames) to scan
         settings: Settings dictionary from main.py
-        use_proxy: Whether to use Tor proxy
 
     Returns:
-        List of command arguments
+        Command arguments string for nmap
     """
-    # Extract settings from passed dict
-    NAABU_DOCKER_IMAGE = settings.get('NAABU_DOCKER_IMAGE', 'projectdiscovery/naabu:latest')
-    NAABU_TOP_PORTS = settings.get('NAABU_TOP_PORTS', '1000')
-    NAABU_CUSTOM_PORTS = settings.get('NAABU_CUSTOM_PORTS', '')
-    NAABU_RATE_LIMIT = settings.get('NAABU_RATE_LIMIT', 1000)
-    NAABU_THREADS = settings.get('NAABU_THREADS', 25)
-    NAABU_TIMEOUT = settings.get('NAABU_TIMEOUT', 10000)
-    NAABU_RETRIES = settings.get('NAABU_RETRIES', 1)
-    NAABU_SCAN_TYPE = settings.get('NAABU_SCAN_TYPE', 's')
-    NAABU_EXCLUDE_CDN = settings.get('NAABU_EXCLUDE_CDN', False)
-    NAABU_DISPLAY_CDN = settings.get('NAABU_DISPLAY_CDN', True)
-    NAABU_SKIP_HOST_DISCOVERY = settings.get('NAABU_SKIP_HOST_DISCOVERY', True)
-    NAABU_VERIFY_PORTS = settings.get('NAABU_VERIFY_PORTS', True)
-    NAABU_PASSIVE_MODE = settings.get('NAABU_PASSIVE_MODE', False)
+    # Extract settings with defaults
+    NMAP_TOP_PORTS = settings.get('NMAP_TOP_PORTS', '1000')
+    NMAP_CUSTOM_PORTS = settings.get('NMAP_CUSTOM_PORTS', '')
+    NMAP_SCAN_TYPE = settings.get('NMAP_SCAN_TYPE', 'T')  # TCP connect scan for unprivileged mode
+    NMAP_SERVICE_DETECTION = settings.get('NMAP_SERVICE_DETECTION', True)
+    NMAP_OS_DETECTION = settings.get('NMAP_OS_DETECTION', False)
+    NMAP_AGGRESSIVE = settings.get('NMAP_AGGRESSIVE', False)
+    NMAP_SCRIPT_SCAN = settings.get('NMAP_SCRIPT_SCAN', True)
+    NMAP_TIMING = settings.get('NMAP_TIMING', '4')  # T4 timing
+    NMAP_OUTPUT_XML = settings.get('NMAP_OUTPUT_XML', True)
 
-    # Convert container paths to host paths for sibling container volume mounts
-    targets_host_path = get_host_path(str(Path(targets_file).parent))
-    output_host_path = get_host_path(str(Path(output_file).parent))
+    # Build command arguments
+    args = []
 
-    targets_filename = Path(targets_file).name
-    output_filename = Path(output_file).name
-
-    # Build Docker command
-    # Note: Naabu requires --net=host for proper packet handling
-    cmd = [
-        "docker", "run", "--rm",
-        "--net=host",  # Required for SYN scans
-        "-v", f"{targets_host_path}:/targets:ro",
-        "-v", f"{output_host_path}:/output",
-    ]
-
-    # Add image
-    cmd.append(NAABU_DOCKER_IMAGE)
-
-    # Input/Output
-    cmd.extend(["-list", f"/targets/{targets_filename}"])
-    cmd.extend(["-o", f"/output/{output_filename}"])
-    cmd.append("-json")
-    cmd.append("-silent")
-
-    # Port configuration
-    if NAABU_CUSTOM_PORTS:
-        cmd.extend(["-p", NAABU_CUSTOM_PORTS])
-    elif NAABU_TOP_PORTS:
-        cmd.extend(["-top-ports", str(NAABU_TOP_PORTS)])
+    # Add unprivileged flag to avoid raw socket issues
+    args.append("--unprivileged")
 
     # Scan type
-    cmd.extend(["-scan-type", NAABU_SCAN_TYPE])
+    if NMAP_SCAN_TYPE:
+        args.append(f"-s{NMAP_SCAN_TYPE}")
 
-    # Performance settings
-    cmd.extend(["-rate", str(NAABU_RATE_LIMIT)])
-    cmd.extend(["-c", str(NAABU_THREADS)])
-    cmd.extend(["-timeout", str(NAABU_TIMEOUT)])
-    cmd.extend(["-retries", str(NAABU_RETRIES)])
+    # Port specification
+    if NMAP_CUSTOM_PORTS:
+        args.extend(["-p", NMAP_CUSTOM_PORTS])
+    else:
+        args.append(f"--top-ports={NMAP_TOP_PORTS}")
 
-    # Feature flags
-    if NAABU_EXCLUDE_CDN:
-        cmd.append("-exclude-cdn")
+    # Service detection
+    if NMAP_SERVICE_DETECTION:
+        args.append("-sV")
 
-    if NAABU_DISPLAY_CDN:
-        cmd.append("-cdn")
+    # OS detection
+    if NMAP_OS_DETECTION:
+        args.append("-O")
 
-    if NAABU_SKIP_HOST_DISCOVERY:
-        cmd.append("-Pn")
+    # Aggressive scan (includes -A: OS, version, script, traceroute)
+    if NMAP_AGGRESSIVE:
+        args.append("-A")
+    elif NMAP_SCRIPT_SCAN:
+        # Default scripts if not aggressive
+        args.append("-sC")
 
-    if NAABU_VERIFY_PORTS:
-        cmd.append("-verify")
+    # Timing template
+    args.append(f"-T{NMAP_TIMING}")
 
-    if NAABU_PASSIVE_MODE:
-        cmd.append("-passive")
+    # Output format - always include XML for parsing
+    if NMAP_OUTPUT_XML:
+        args.extend(["-oX", "-"])  # Output XML to stdout
 
-    # Proxy support (naabu expects just ip:port for socks5 proxy)
-    if use_proxy:
-        cmd.extend(["-proxy", "127.0.0.1:9050"])
+    # Add targets
+    args.extend(targets)
 
-    return cmd
+    return " ".join(args)
 
 
 # =============================================================================
 # Result Parsing
 # =============================================================================
 
-def parse_naabu_output(output_file: str) -> Dict:
+def parse_nmap_xml_output(xml_output: str) -> Dict:
     """
-    Parse Naabu JSON Lines output into structured format.
+    Parse nmap XML output into structured format.
 
-    Naabu outputs one JSON object per line:
-    {"host":"example.com","ip":"93.184.216.34","port":80}
-    {"host":"example.com","ip":"93.184.216.34","port":443}
+    Args:
+        xml_output: XML output from nmap -oX command
 
     Returns:
         Structured dictionary with by_host, by_ip, and summary sections
@@ -297,89 +231,140 @@ def parse_naabu_output(output_file: str) -> Dict:
     by_ip = {}
     all_ports = set()
 
-    if not Path(output_file).exists():
-        return {
-            "by_host": {},
-            "by_ip": {},
-            "all_ports": [],
-            "summary": {
-                "hosts_scanned": 0,
-                "ips_scanned": 0,
-                "hosts_with_open_ports": 0,
-                "total_open_ports": 0,
-                "unique_ports": [],
-                "unique_port_count": 0,
-                "cdn_hosts": 0
-            }
-        }
+    try:
+        # Clean up the XML output to extract just the XML part
+        xml_start = xml_output.find('<?xml')
+        if xml_start == -1:
+            xml_start = xml_output.find('<nmaprun')
 
-    with open(output_file, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+        if xml_start == -1:
+            # No XML found, return empty results
+            return create_empty_results()
+
+        xml_data = xml_output[xml_start:]
+
+        # Parse XML
+        root = ET.fromstring(xml_data)
+
+        # Process each host
+        for host in root.findall('.//host'):
+            # Get host status
+            status = host.find('status')
+            if status is None or status.get('state') != 'up':
                 continue
 
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
+            # Get addresses (IP and hostname)
+            addresses = host.findall('address')
+            ip_address = None
+            hostname = None
+
+            for addr in addresses:
+                if addr.get('addrtype') == 'ipv4':
+                    ip_address = addr.get('addr')
+                elif addr.get('addrtype') == 'ipv6':
+                    ip_address = addr.get('addr')
+
+            # Get hostnames
+            hostnames_elem = host.find('hostnames')
+            if hostnames_elem is not None:
+                hostname_elem = hostnames_elem.find('hostname')
+                if hostname_elem is not None:
+                    hostname = hostname_elem.get('name')
+
+            # Use IP if no hostname
+            if hostname is None:
+                hostname = ip_address
+
+            if ip_address is None:
                 continue
 
-            host = entry.get("host", "")
-            ip = entry.get("ip", "")
-            port = entry.get("port")
-            cdn = entry.get("cdn", "")
-            cdn_name = entry.get("cdn-name", "")
-
-            if port:
-                all_ports.add(port)
-
-            # Organize by host
-            if host:
-                if host not in by_host:
-                    by_host[host] = {
-                        "host": host,
-                        "ip": ip,
-                        "ports": [],
-                        "port_details": [],
-                        "cdn": cdn_name if cdn_name else None,
-                        "is_cdn": bool(cdn or cdn_name)
+            # Get OS information
+            os_info = None
+            os_elem = host.find('os')
+            if os_elem is not None:
+                os_match = os_elem.find('.//osmatch')
+                if os_match is not None:
+                    os_info = {
+                        'name': os_match.get('name'),
+                        'accuracy': os_match.get('accuracy'),
+                        'line': os_match.get('line')
                     }
 
-                if port and port not in by_host[host]["ports"]:
-                    by_host[host]["ports"].append(port)
+            # Process ports
+            ports_elem = host.find('ports')
+            host_ports = []
+            port_details = []
 
-                    # Determine service based on common port mappings
-                    service = get_service_name(port)
-                    by_host[host]["port_details"].append({
-                        "port": port,
-                        "protocol": "tcp",
-                        "service": service
+            if ports_elem is not None:
+                for port in ports_elem.findall('port'):
+                    port_num = int(port.get('portid'))
+                    protocol = port.get('protocol', 'tcp')
+
+                    state_elem = port.find('state')
+                    if state_elem is None or state_elem.get('state') != 'open':
+                        continue
+
+                    all_ports.add(port_num)
+                    host_ports.append(port_num)
+
+                    # Get service information
+                    service_elem = port.find('service')
+                    service_name = ""
+                    service_product = ""
+                    service_version = ""
+                    service_extrainfo = ""
+
+                    if service_elem is not None:
+                        service_name = service_elem.get('name', '')
+                        service_product = service_elem.get('product', '')
+                        service_version = service_elem.get('version', '')
+                        service_extrainfo = service_elem.get('extrainfo', '')
+
+                    # Fallback to IANA service name if not detected
+                    if not service_name:
+                        service_name = get_service_name(port_num)
+
+                    port_details.append({
+                        "port": port_num,
+                        "protocol": protocol,
+                        "service": service_name,
+                        "product": service_product,
+                        "version": service_version,
+                        "extrainfo": service_extrainfo,
+                        "state": "open"
                     })
 
-            # Organize by IP
-            if ip:
-                if ip not in by_ip:
-                    by_ip[ip] = {
-                        "ip": ip,
+            # Store by hostname
+            if hostname:
+                by_host[hostname] = {
+                    "host": hostname,
+                    "ip": ip_address,
+                    "ports": sorted(host_ports),
+                    "port_details": sorted(port_details, key=lambda x: x["port"]),
+                    "os_info": os_info,
+                    "total_ports": len(host_ports)
+                }
+
+            # Store by IP
+            if ip_address:
+                if ip_address not in by_ip:
+                    by_ip[ip_address] = {
+                        "ip": ip_address,
                         "hostnames": [],
-                        "ports": [],
-                        "cdn": cdn_name if cdn_name else None,
-                        "is_cdn": bool(cdn or cdn_name)
+                        "ports": sorted(host_ports),
+                        "os_info": os_info,
+                        "total_ports": len(host_ports)
                     }
 
-                if host and host not in by_ip[ip]["hostnames"]:
-                    by_ip[ip]["hostnames"].append(host)
+                if hostname and hostname != ip_address and hostname not in by_ip[ip_address]["hostnames"]:
+                    by_ip[ip_address]["hostnames"].append(hostname)
 
-                if port and port not in by_ip[ip]["ports"]:
-                    by_ip[ip]["ports"].append(port)
-
-    # Sort ports
-    for host in by_host:
-        by_host[host]["ports"].sort()
-        by_host[host]["port_details"].sort(key=lambda x: x["port"])
-
-    for ip in by_ip:
-        by_ip[ip]["ports"].sort()
+    except ET.ParseError as e:
+        print(f"[!] XML parsing error: {e}")
+        return create_empty_results()
+    except Exception as e:
+        print(f"[!] Error parsing nmap output: {e}")
+        return create_empty_results()
 
     all_ports_sorted = sorted(list(all_ports))
 
@@ -391,7 +376,6 @@ def parse_naabu_output(output_file: str) -> Dict:
         "total_open_ports": sum(len(h["ports"]) for h in by_host.values()),
         "unique_ports": all_ports_sorted,
         "unique_port_count": len(all_ports_sorted),
-        "cdn_hosts": len([h for h in by_host.values() if h.get("is_cdn")])
     }
 
     return {
@@ -402,27 +386,21 @@ def parse_naabu_output(output_file: str) -> Dict:
     }
 
 
-# =============================================================================
-# File Ownership Handling
-# =============================================================================
-
-def get_real_user_ids() -> tuple:
-    """Get the real user/group IDs (handles sudo)."""
-    sudo_uid = os.environ.get('SUDO_UID')
-    sudo_gid = os.environ.get('SUDO_GID')
-
-    if sudo_uid and sudo_gid:
-        return (int(sudo_uid), int(sudo_gid))
-    return (os.getuid(), os.getgid())
-
-
-def fix_file_ownership(file_path: Path) -> None:
-    """Fix file ownership for files created by Docker (as root)."""
-    try:
-        uid, gid = get_real_user_ids()
-        os.chown(str(file_path), uid, gid)
-    except Exception:
-        pass  # Silently ignore if we can't change ownership
+def create_empty_results() -> Dict:
+    """Create empty results structure."""
+    return {
+        "by_host": {},
+        "by_ip": {},
+        "all_ports": [],
+        "summary": {
+            "hosts_scanned": 0,
+            "ips_scanned": 0,
+            "hosts_with_open_ports": 0,
+            "total_open_ports": 0,
+            "unique_ports": [],
+            "unique_port_count": 0,
+        }
+    }
 
 
 # =============================================================================
@@ -431,7 +409,7 @@ def fix_file_ownership(file_path: Path) -> None:
 
 def run_port_scan(recon_data: dict, output_file: Path = None, settings: dict = None) -> dict:
     """
-    Run Naabu port scan on targets from recon data.
+    Run NMAP port scan on targets from recon data.
 
     Args:
         recon_data: Dictionary containing DNS/subdomain data
@@ -442,45 +420,27 @@ def run_port_scan(recon_data: dict, output_file: Path = None, settings: dict = N
         Enriched recon_data with "port_scan" section added
     """
     print("\n" + "="*60)
-    print("NAABU PORT SCANNER")
+    print("NMAP PORT SCANNER")
     print("="*60)
 
     # Use passed settings or empty dict as fallback
     if settings is None:
         settings = {}
 
-    # Extract settings from passed dict
-    NAABU_DOCKER_IMAGE = settings.get('NAABU_DOCKER_IMAGE', 'projectdiscovery/naabu:latest')
-    NAABU_TOP_PORTS = settings.get('NAABU_TOP_PORTS', '1000')
-    NAABU_CUSTOM_PORTS = settings.get('NAABU_CUSTOM_PORTS', '')
-    NAABU_RATE_LIMIT = settings.get('NAABU_RATE_LIMIT', 1000)
-    NAABU_SCAN_TYPE = settings.get('NAABU_SCAN_TYPE', 's')
-    NAABU_EXCLUDE_CDN = settings.get('NAABU_EXCLUDE_CDN', False)
-    NAABU_PASSIVE_MODE = settings.get('NAABU_PASSIVE_MODE', False)
-    USE_TOR_FOR_RECON = settings.get('USE_TOR_FOR_RECON', False)
+    # Extract settings with defaults
+    NMAP_TOP_PORTS = settings.get('NMAP_TOP_PORTS', '1000')
+    NMAP_CUSTOM_PORTS = settings.get('NMAP_CUSTOM_PORTS', '')
+    NMAP_SCAN_TYPE = settings.get('NMAP_SCAN_TYPE', 'T')
+    NMAP_SERVICE_DETECTION = settings.get('NMAP_SERVICE_DETECTION', True)
+    NMAP_OS_DETECTION = settings.get('NMAP_OS_DETECTION', False)
+    NMAP_AGGRESSIVE = settings.get('NMAP_AGGRESSIVE', False)
+    NMAP_TIMING = settings.get('NMAP_TIMING', '4')
 
-    # Check Docker
-    if not is_docker_installed():
-        print("[!] Docker is not installed. Please install Docker first.")
-        return recon_data
-
-    if not is_docker_running():
-        print("[!] Docker daemon is not running. Please start Docker.")
-        return recon_data
-
-    # Pull image if needed
-    if not pull_naabu_docker_image(NAABU_DOCKER_IMAGE):
-        print("[!] Failed to get Naabu Docker image")
-        return recon_data
-
-    # Check Tor if enabled
-    use_proxy = False
-    if USE_TOR_FOR_RECON:
-        if is_tor_running():
-            print("    [✓] Tor proxy detected - enabling anonymous scanning")
-            use_proxy = True
-        else:
-            print("    [!] Tor not running - scanning without proxy")
+    # Check NMAP availability
+    if not is_nmap_available():
+        error_msg = "[ERROR] NMAP is not installed or not accessible. Cannot perform port scanning."
+        print(error_msg)
+        raise RuntimeError(error_msg)
 
     # Extract targets
     print("\n[*] Extracting targets from recon data...")
@@ -498,167 +458,77 @@ def run_port_scan(recon_data: dict, output_file: Path = None, settings: dict = N
     print(f"    [*] Found {len(unique_hostnames)} hostnames and {len(unique_ips)} IPs")
     print(f"    [*] Total targets to scan: {len(all_targets)}")
 
-    # Create temp directory for scan files
-    # Use /tmp/redamon to avoid spaces in paths (snap Docker issue)
-    scan_temp_dir = Path("/tmp/redamon/.naabu_temp")
-    scan_temp_dir.mkdir(parents=True, exist_ok=True)
+    # Build and execute command
+    cmd_args = build_nmap_command(all_targets, settings)
 
-    try:
-        # Write targets file
-        targets_file = scan_temp_dir / "targets.txt"
-        with open(targets_file, 'w') as f:
-            for target in all_targets:
-                f.write(f"{target}\n")
+    print(f"\n[*] Starting NMAP scan...")
+    print(f"    [*] Scan type: {NMAP_SCAN_TYPE}")
+    print(f"    [*] Ports: {NMAP_CUSTOM_PORTS if NMAP_CUSTOM_PORTS else f'top {NMAP_TOP_PORTS}'}")
+    print(f"    [*] Timing: T{NMAP_TIMING}")
+    print(f"    [*] Service detection: {NMAP_SERVICE_DETECTION}")
+    print(f"    [*] OS detection: {NMAP_OS_DETECTION}")
+    print(f"    [*] Aggressive mode: {NMAP_AGGRESSIVE}")
 
-        # Set output file
-        naabu_output = scan_temp_dir / "naabu_output.json"
+    start_time = datetime.now()
 
-        # Build and run command
-        cmd = build_naabu_command(str(targets_file), str(naabu_output), settings, use_proxy)
+    # Execute scan directly
+    nmap_output = execute_nmap_direct(cmd_args)
 
-        print(f"\n[*] Starting Naabu scan...")
-        print(f"    [*] Scan type: {'SYN' if NAABU_SCAN_TYPE == 's' else 'CONNECT'}")
-        print(f"    [*] Ports: {NAABU_CUSTOM_PORTS if NAABU_CUSTOM_PORTS else f'top {NAABU_TOP_PORTS}'}")
-        print(f"    [*] Rate limit: {NAABU_RATE_LIMIT} pps")
-        print(f"    [*] Threads: {settings.get('NAABU_THREADS', 25)}")
-        print(f"    [*] Timeout: {settings.get('NAABU_TIMEOUT', 10000)}ms")
-        print(f"    [*] Retries: {settings.get('NAABU_RETRIES', 1)}")
-        print(f"    [*] Exclude CDN: {NAABU_EXCLUDE_CDN}")
-        print(f"    [*] Skip host discovery: {settings.get('NAABU_SKIP_HOST_DISCOVERY', True)}")
-        print(f"    [*] Verify ports: {settings.get('NAABU_VERIFY_PORTS', True)}")
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
 
-        if NAABU_PASSIVE_MODE:
-            print(f"    [*] Mode: PASSIVE (Shodan InternetDB)")
+    # Check for errors
+    if nmap_output.startswith("[ERROR]"):
+        print(f"\n{nmap_output}")
+        raise RuntimeError(nmap_output)
 
-        start_time = datetime.now()
+    # Parse results
+    print(f"\n[*] Parsing results...")
+    results = parse_nmap_xml_output(nmap_output)
 
-        # Execute scan with fallback mechanism
-        scan_succeeded = False
-        actual_scan_type = NAABU_SCAN_TYPE
+    # Build final structure
+    nmap_results = {
+        "scan_metadata": {
+            "scan_timestamp": start_time.isoformat(),
+            "scan_duration_seconds": round(duration, 2),
+            "scanner": "nmap",
+            "scan_type": NMAP_SCAN_TYPE,
+            "ports_config": NMAP_CUSTOM_PORTS if NMAP_CUSTOM_PORTS else f"top-{NMAP_TOP_PORTS}",
+            "service_detection": NMAP_SERVICE_DETECTION,
+            "os_detection": NMAP_OS_DETECTION,
+            "aggressive_mode": NMAP_AGGRESSIVE,
+            "timing": f"T{NMAP_TIMING}",
+            "total_targets": len(all_targets),
+            "execution_method": "direct"
+        },
+        "by_host": results["by_host"],
+        "by_ip": results["by_ip"],
+        "all_ports": results["all_ports"],
+        "ip_to_hostnames": ip_to_hostnames,
+        "summary": results["summary"]
+    }
 
-        for attempt, scan_type in enumerate([NAABU_SCAN_TYPE, 'c'] if NAABU_SCAN_TYPE == 's' else [NAABU_SCAN_TYPE]):
-            if attempt > 0:
-                # Retry with CONNECT scan after SYN scan failed
-                print(f"\n    [*] Retrying with CONNECT scan...")
-                settings_copy = settings.copy()
-                settings_copy['NAABU_SCAN_TYPE'] = 'c'
-                cmd = build_naabu_command(str(targets_file), str(naabu_output), settings_copy, use_proxy)
-                actual_scan_type = 'c'
+    # Print summary
+    summary = results["summary"]
+    print(f"\n[✓] Scan completed in {duration:.1f} seconds")
+    print(f"    [*] Hosts with open ports: {summary['hosts_with_open_ports']}")
+    print(f"    [*] Total open ports found: {summary['total_open_ports']}")
+    print(f"    [*] Unique ports: {summary['unique_port_count']}")
 
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+    if results["all_ports"]:
+        print(f"    [*] Ports discovered: {', '.join(map(str, results['all_ports'][:20]))}" +
+              (f"... (+{len(results['all_ports'])-20} more)" if len(results['all_ports']) > 20 else ""))
 
-            _, stderr = process.communicate(timeout=1800)  # 30 min timeout
+    # Add to recon_data
+    recon_data["port_scan"] = nmap_results
 
-            # Check for SIGSEGV crash (common in SYN mode)
-            if 'SIGSEGV' in stderr or 'segmentation' in stderr.lower():
-                print(f"    [!] Scan crashed (SIGSEGV) - naabu binary error")
-                if scan_type == 's' and attempt == 0:
-                    print(f"    [*] SYN scan requires raw sockets - will try CONNECT scan")
-                    continue  # Try CONNECT scan
-                else:
-                    break  # No more fallbacks
+    # Save incrementally
+    if output_file:
+        with open(output_file, 'w') as f:
+            json.dump(recon_data, f, indent=2, default=str)
+        print(f"\n[✓] Results saved to {output_file}")
 
-            if process.returncode == 0 or naabu_output.exists():
-                # SYN scan succeeded but found 0 ports — firewall may be
-                # silently dropping SYN probes.  Retry with CONNECT scan
-                # which uses full TCP handshake and works through most firewalls.
-                if (scan_type == 's' and attempt == 0
-                        and (not naabu_output.exists()
-                             or naabu_output.stat().st_size == 0)):
-                    print(f"    [!] SYN scan completed but found no open ports")
-                    print(f"    [*] Firewall may be dropping SYN probes — retrying with CONNECT scan...")
-                    continue
-                scan_succeeded = True
-                break
-
-            if stderr and attempt == 0 and scan_type == 's':
-                print(f"    [!] SYN scan failed: {stderr[:150] if stderr else 'Unknown error'}")
-                continue  # Try CONNECT scan
-
-            print(f"    [!] Scan failed: {stderr[:200] if stderr else 'Unknown error'}")
-            break
-
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-
-        if not scan_succeeded and not naabu_output.exists():
-            print(f"    [!] All scan attempts failed")
-            return recon_data
-
-        # Parse results
-        print(f"\n[*] Parsing results...")
-        results = parse_naabu_output(str(naabu_output))
-
-        # Build final structure
-        naabu_results = {
-            "scan_metadata": {
-                "scan_timestamp": start_time.isoformat(),
-                "scan_duration_seconds": round(duration, 2),
-                "docker_image": NAABU_DOCKER_IMAGE,
-                "scan_type": "syn" if actual_scan_type == "s" else "connect",
-                "scan_type_fallback": actual_scan_type != NAABU_SCAN_TYPE,
-                "ports_config": NAABU_CUSTOM_PORTS if NAABU_CUSTOM_PORTS else f"top-{NAABU_TOP_PORTS}",
-                "rate_limit": NAABU_RATE_LIMIT,
-                "passive_mode": NAABU_PASSIVE_MODE,
-                "proxy_used": use_proxy,
-                "total_targets": len(all_targets),
-                "cdn_exclusion": NAABU_EXCLUDE_CDN
-            },
-            "by_host": results["by_host"],
-            "by_ip": results["by_ip"],
-            "all_ports": results["all_ports"],
-            "ip_to_hostnames": ip_to_hostnames,
-            "summary": results["summary"]
-        }
-
-        # Print summary
-        summary = results["summary"]
-        print(f"\n[✓] Scan completed in {duration:.1f} seconds")
-        if actual_scan_type != NAABU_SCAN_TYPE:
-            print(f"    [*] Note: Used CONNECT scan (SYN scan crashed)")
-        print(f"    [*] Hosts with open ports: {summary['hosts_with_open_ports']}")
-        print(f"    [*] Total open ports found: {summary['total_open_ports']}")
-        print(f"    [*] Unique ports: {summary['unique_port_count']}")
-
-        if summary.get('cdn_hosts', 0) > 0:
-            print(f"    [*] CDN-protected hosts: {summary['cdn_hosts']}")
-
-        if results["all_ports"]:
-            print(f"    [*] Ports discovered: {', '.join(map(str, results['all_ports'][:20]))}" +
-                  (f"... (+{len(results['all_ports'])-20} more)" if len(results['all_ports']) > 20 else ""))
-
-        # Add to recon_data
-        recon_data["port_scan"] = naabu_results
-
-        # Save incrementally
-        if output_file:
-            with open(output_file, 'w') as f:
-                json.dump(recon_data, f, indent=2, default=str)
-            fix_file_ownership(output_file)
-            print(f"\n[✓] Results saved to {output_file}")
-
-        return recon_data
-
-    except subprocess.TimeoutExpired:
-        print("[!] Scan timed out after 30 minutes")
-        return recon_data
-    except Exception as e:
-        print(f"[!] Error during scan: {e}")
-        return recon_data
-    finally:
-        # Cleanup temp files
-        try:
-            if scan_temp_dir.exists():
-                for f in scan_temp_dir.iterdir():
-                    f.unlink()
-                scan_temp_dir.rmdir()
-        except Exception:
-            pass
+    return recon_data
 
 
 # =============================================================================
@@ -667,7 +537,7 @@ def run_port_scan(recon_data: dict, output_file: Path = None, settings: dict = N
 
 def enrich_recon_file(recon_file: Path) -> dict:
     """
-    Enrich an existing recon JSON file with Naabu scan results.
+    Enrich an existing recon JSON file with NMAP scan results.
 
     Args:
         recon_file: Path to existing recon JSON file
@@ -687,4 +557,3 @@ def enrich_recon_file(recon_file: Path) -> dict:
     enriched = run_port_scan(recon_data, output_file=recon_file, settings=settings)
 
     return enriched
-
